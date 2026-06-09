@@ -48,10 +48,10 @@ def build_daily_embed(
     Discord user mentions are resolved from the discord_id field in profiles.json.
     Inactive users are listed at the bottom.
     Returns a single-element list for API compatibility.
-    """
+    date_str = today.strftime("%A, %d %B %Y")
     embed = discord.Embed(
         title="📅 Daily LeetCode Report",
-        description=f"<t:{today_ts}:D>",
+        description=f"**{date_str} (IST)**",
         color=config.EMBED_COLOR_DAILY,
     )
     embed.set_footer(text="Updates daily at midnight")
