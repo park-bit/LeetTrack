@@ -198,10 +198,22 @@ class LeetCodeBot(discord.Client):
         current_streak, longest_streak = self.streak_manager.get(name)
 
         import pytz
-        from datetime import datetime
+        from datetime import datetime, timedelta
         tz = pytz.timezone(config.TIMEZONE)
-        today_str = datetime.now(tz).date().isoformat()
+        today = datetime.now(tz).date()
+        today_str = today.isoformat()
         today_problems = self.state.get_day_problems(name, today_str)
+
+        week_start = self.state.get_week_start()
+        if week_start:
+            delta_days = (today - week_start).days
+            if delta_days < 0: delta_days = 0
+            dates_in_week = [week_start + timedelta(days=i) for i in range(delta_days + 1)]
+        else:
+            dates_in_week = [today]
+            
+        weekly_solved = sum(len(self.state.get_day_problems(name, d.isoformat())) for d in dates_in_week)
+        daily_solved = len(today_problems)
 
         embed = discord.Embed(
             title=f"📊 {name}\'s Stats",
@@ -209,12 +221,12 @@ class LeetCodeBot(discord.Client):
         )
         embed.add_field(
             name="Today",
-            value=f"**{stats.get('daily_solved', 0)}** solved",
+            value=f"**{daily_solved}** solved",
             inline=True,
         )
         embed.add_field(
             name="This Week",
-            value=f"**{stats.get('weekly_solved', 0)}** solved",
+            value=f"**{weekly_solved}** solved",
             inline=True,
         )
         streak_label = "days" if current_streak != 1 else "day"
