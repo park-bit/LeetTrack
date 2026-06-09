@@ -15,7 +15,7 @@ inside the asyncio event loop.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -150,14 +150,20 @@ class DailyScheduler:
         # Is today Monday?
         is_monday = today.weekday() == 0
 
-        # Reset weekly stats & start new week on Monday
-        if is_monday:
-            stored_week_start = self._state.get_week_start()
-            if stored_week_start is None or stored_week_start != today:
-                logger.info("Monday detected — starting new week.")
-                self._lb_manager.reset_weekly_leaderboard(profiles)
-                self._state.set_week_start(today)
-                # Archive notification (new message will be sent below)
+        stored_week_start = self._state.get_week_start()
+
+        # If it's Monday and a new week hasn't started yet, or week_start is missing
+        if is_monday and (stored_week_start is None or stored_week_start != today):
+            logger.info("Monday detected — starting new week.")
+            self._lb_manager.reset_weekly_leaderboard(profiles)
+            self._state.set_week_start(today)
+        elif stored_week_start is None:
+            # If the bot was offline on Monday, backfill the week_start to the most recent Monday
+            recent_monday = today - timedelta(days=today.weekday())
+            self._state.set_week_start(recent_monday)
+            logger.info("Week start was missing. Backfilled to most recent Monday: %s", recent_monday)
+
+        # Archive notification (new message will be sent below)
 
         # Reset daily stats
         self._state.reset_all_daily_stats()

@@ -273,6 +273,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
         embed.add_field(name="`/run`", value="Manually trigger the daily report. (Takes ~1 min)", inline=False)
         embed.add_field(name="`/leaderboard`", value="Show current weekly and monthly leaderboards.", inline=False)
         embed.add_field(name="`/weeksummary`", value="Generate a chart showing activity over the last 7 days.", inline=False)
+        embed.add_field(name="`/fetchdate <YYYY-MM-DD>`", value="Fetch the problems solved by everyone on a specific date.\n*Example:* `/fetchdate target_date:2026-06-09`", inline=False)
         embed.add_field(name="`/register <name> <url>`", value="Register your LeetCode profile.\n*Example:* `/register name:Park url:https://leetcode.com/u/park-bit/`", inline=False)
         embed.add_field(name="`/unregister`", value="Remove your LeetCode profile from the bot.", inline=False)
         embed.add_field(name="`/profile`", value="Check which LeetCode profile is linked to your Discord account.", inline=False)
@@ -372,8 +373,50 @@ def _register_commands(bot: LeetCodeBot) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.error("Manual run failed: %s", exc, exc_info=True)
             await interaction.followup.send(
-                f"❌ Daily run failed: {exc}", ephemeral=True
+                f"❌ Error during manual run: {exc}", ephemeral=True
             )
+
+    @bot.tree.command(
+        name="fetchdate",
+        description="Fetch problems solved by everyone on a specific date (YYYY-MM-DD).",
+    )
+    async def fetchdate_command(
+        interaction: discord.Interaction,
+        target_date: str,
+    ) -> None:
+        assert bot.state is not None
+        
+        try:
+            from datetime import datetime
+            d = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except ValueError:
+            await interaction.response.send_message("Invalid date format. Please use YYYY-MM-DD (e.g. 2026-06-09).", ephemeral=True)
+            return
+
+        profiles = bot.profile_manager.get_enabled_profiles() if bot.profile_manager else []
+        embed = discord.Embed(
+            title=f"📅 Submissions on {d.strftime('%B %d, %Y')}",
+            color=config.EMBED_COLOR_DAILY,
+        )
+        
+        found_any = False
+        for p in profiles:
+            name = p["name"]
+            probs = bot.state.get_day_problems(name, d.isoformat())
+            if probs:
+                found_any = True
+                lines = []
+                for idx, prob in enumerate(probs, start=1):
+                    title = prob.get("title", prob.get("slug", ""))
+                    diff  = prob.get("difficulty", "")
+                    url   = prob.get("url", "")
+                    lines.append(f"`{idx}.` {title} ({diff}) [link]({url})")
+                embed.add_field(name=name, value="\n".join(lines), inline=False)
+                
+        if not found_any:
+            embed.description = "No one solved any problems on this day."
+            
+        await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(
         name="leaderboard",
