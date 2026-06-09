@@ -691,20 +691,6 @@ def main() -> None:
 
     bot = LeetCodeBot()
 
-    # Graceful shutdown on Ctrl+C / SIGTERM
-    loop = asyncio.get_event_loop()
-
-    def _handle_signal() -> None:
-        logger.info("Shutdown signal received.")
-        loop.create_task(bot.close())
-
-    try:
-        loop.add_signal_handler(signal.SIGINT, _handle_signal)
-        loop.add_signal_handler(signal.SIGTERM, _handle_signal)
-    except (NotImplementedError, RuntimeError):
-        # Windows doesn't support add_signal_handler on the event loop
-        pass
-
     try:
         bot.run(config.DISCORD_TOKEN, log_handler=None)
     except discord.LoginFailure:
