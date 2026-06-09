@@ -639,9 +639,9 @@ def _register_commands(bot: LeetCodeBot) -> None:
             
         name = matched["name"]
         
-        from leetcode_fetcher import LeetcodeFetcher
-        fetcher = LeetcodeFetcher()
-        stats = await fetcher.get_user_stats(name)
+        from leetcode_fetcher import LeetCodeFetcher
+        async with LeetCodeFetcher() as fetcher:
+            stats = await fetcher.get_user_stats(name)
         
         if not stats:
             await interaction.followup.send(f"❌ Failed to fetch LeetCode profile for **{name}**. Check if the username is correct.")
