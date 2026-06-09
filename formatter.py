@@ -67,6 +67,11 @@ def build_daily_embed(
         stats = daily_stats.get(name, {"solved": 0, "easy": 0, "medium": 0, "hard": 0})
         problems_today = daily_problems.get(name, [])
 
+        # If the exact delta API lagged behind but we physically saw recent submissions today, fall back
+        if stats["solved"] == 0 and len(problems_today) > 0:
+            stats = stats.copy()
+            stats["solved"] = len(problems_today)
+
         if stats["solved"] == 0:
             inactive_names.append(name)
             continue

@@ -238,12 +238,13 @@ class DailyScheduler:
                 stats["easy"] = lc_stats.easy_solved
                 stats["medium"] = lc_stats.medium_solved
                 stats["hard"] = lc_stats.hard_solved
-            else:
-                # Fallback if API completely failed
-                easy = sum(1 for s in today_subs if s.difficulty == "Easy")
-                medium = sum(1 for s in today_subs if s.difficulty == "Medium")
-                hard = sum(1 for s in today_subs if s.difficulty == "Hard")
+
+            # Fallback if the exact delta API lagged behind but we physically saw recent submissions
+            if solved == 0 and len(today_subs) > 0:
                 solved = len(today_subs)
+                easy = max(easy, sum(1 for s in today_subs if s.difficulty == "Easy"))
+                medium = max(medium, sum(1 for s in today_subs if s.difficulty == "Medium"))
+                hard = max(hard, sum(1 for s in today_subs if s.difficulty == "Hard"))
 
             # Update daily stats in state
             stats["daily_solved"] = solved
