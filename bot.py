@@ -1,0 +1,696 @@
+"""
+bot.py
+------
+Entry point for the LeetCode Discord Bot.
+
+Initialises all managers, starts the APScheduler, and connects to
+Discord.  Handles graceful shutdown on SIGINT / SIGTERM.
+
+Bot slash commands:
+  /status       — Show bot status, last run time, and upcoming schedule.
+  /run          — Manually trigger the daily report (owner-only).
+  /leaderboard  — Show current weekly leaderboard on demand.
+  /weeksummary  — Weekly summary with pie + bar chart.
+  /history      — Fetch the LeetCode summary for a specific date.
+  /register     — Link your LeetCode profile to your Discord account.
+  /unregister   — Remove your profile from the tracker.
+  /profile      — View your linked LeetCode profile.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import logging.handlers
+import signal
+import sys
+from datetime import datetime
+from typing import Any
+
+import discord
+from discord import app_commands
+import pytz
+
+import config
+from state_manager import StateManager
+from profile_manager import ProfileManager
+from roadmap_manager import RoadmapManager
+from streak_manager import StreakManager
+from leaderboard_manager import LeaderboardManager
+from discord_manager import DiscordManager
+from scheduler import DailyScheduler
+
+# ---------------------------------------------------------------------------
+# Logging setup
+# ---------------------------------------------------------------------------
+
+
+def _setup_logging() -> None:
+    """Configure root logger with rotating file + console handlers."""
+    config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, config.LOG_LEVEL.upper(), logging.INFO))
+
+    fmt = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Rotating file handler
+    file_handler = logging.handlers.RotatingFileHandler(
+        config.LOG_FILE,
+        maxBytes=config.LOG_MAX_BYTES,
+        backupCount=config.LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(fmt)
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(fmt)
+
+    root.addHandler(file_handler)
+    root.addHandler(console_handler)
+
+
+# ---------------------------------------------------------------------------
+# Bot definition
+# ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+
+class LeetCodeBot(discord.Client):
+    """Main Discord client with slash command tree."""
+
+    def __init__(self) -> None:
+        intents = discord.Intents.default()
+        intents.message_content = False  # not needed — we only check message.mentions
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+
+        # Managers (initialised in setup())
+        self.state: StateManager | None = None
+        self.profile_manager: ProfileManager | None = None
+        self.roadmap_manager: RoadmapManager | None = None
+        self.streak_manager: StreakManager | None = None
+        self.leaderboard_manager: LeaderboardManager | None = None
+        self.discord_manager: DiscordManager | None = None
+        self.scheduler: DailyScheduler | None = None
+
+    async def setup_hook(self) -> None:
+        """Called by discord.py before connecting — initialise everything."""
+        # Managers
+        self.state = StateManager()
+        self.state.load()
+
+        self.profile_manager = ProfileManager()
+        self.profile_manager.load()
+
+        self.roadmap_manager = RoadmapManager()
+        self.roadmap_manager.load()
+
+        self.streak_manager = StreakManager(self.state)
+        self.leaderboard_manager = LeaderboardManager(self.state)
+        self.discord_manager = DiscordManager(self, self.state)
+
+        self.scheduler = DailyScheduler(
+            state=self.state,
+            profile_manager=self.profile_manager,
+            roadmap_manager=self.roadmap_manager,
+            streak_manager=self.streak_manager,
+            leaderboard_manager=self.leaderboard_manager,
+            discord_manager=self.discord_manager,
+        )
+
+        # Register slash commands
+        _register_commands(self)
+
+        # Sync slash commands globally
+        await self.tree.sync()
+        logger.info("Slash commands synced.")
+
+    async def on_ready(self) -> None:
+        """Called when the bot has successfully connected to Discord."""
+        assert self.scheduler is not None
+        assert self.user is not None
+
+        logger.info(
+            "Bot connected as %s (ID: %d).", self.user.name, self.user.id
+        )
+
+        # Start scheduler
+        self.scheduler.start()
+        logger.info("Bot is ready and scheduler is running.")
+
+    async def close(self) -> None:
+        """Graceful shutdown."""
+        logger.info("Shutting down bot...")
+        if self.scheduler:
+            self.scheduler.stop()
+        if self.state:
+            self.state.save()
+        await super().close()
+        logger.info("Bot shutdown complete.")
+
+    async def on_message(self, message: discord.Message) -> None:
+        """
+        Respond when a registered user @mentions the bot.
+
+        - Looks up the message author's Discord ID in profiles.json.
+        - If found: replies with today's solves, streak, and weekly total.
+        - If not found: replies with a friendly "not found" message.
+        """
+        if message.author.bot:
+            return
+        if self.user is None or self.user not in message.mentions:
+            return
+        if self.state is None or self.profile_manager is None or self.streak_manager is None:
+            return
+
+        author_id = str(message.author.id)
+        profiles  = self.profile_manager.get_enabled_profiles()
+
+        # Find profile by discord_id
+        matched = next(
+            (p for p in profiles if p.get("discord_id") == author_id),
+            None,
+        )
+
+        if matched is None:
+            await message.reply(
+                "❌ **User not found in database.**\n"
+                "Your Discord account isn\'t linked to a LeetCode profile.\n"
+                "Ask the admin to add you to `profiles.json` with your Discord ID.",
+                mention_author=True,
+            )
+            logger.info("Mention from unknown user %s (%s).", message.author, author_id)
+            return
+
+        name = matched["name"]
+        stats = self.state.get_user_stats(name)
+        current_streak, longest_streak = self.streak_manager.get(name)
+
+        from datetime import date
+        today_str = date.today().isoformat()
+        today_problems = self.state.get_day_problems(name, today_str)
+
+        embed = discord.Embed(
+            title=f"📊 {name}\'s Stats",
+            color=config.EMBED_COLOR_DAILY,
+        )
+        embed.add_field(
+            name="Today",
+            value=f"**{stats.get('daily_solved', 0)}** solved",
+            inline=True,
+        )
+        embed.add_field(
+            name="This Week",
+            value=f"**{stats.get('weekly_solved', 0)}** solved",
+            inline=True,
+        )
+        streak_label = "days" if current_streak != 1 else "day"
+        embed.add_field(
+            name="🔥 Streak",
+            value=f"**{current_streak}** {streak_label}  (longest: {longest_streak})",
+            inline=True,
+        )
+
+        if today_problems:
+            lines = []
+            for idx, prob in enumerate(today_problems, start=1):
+                title = prob.get("title", prob.get("slug", ""))
+                diff  = prob.get("difficulty", "")
+                url   = prob.get("url", "")
+                tags  = prob.get("tags", [])
+                tag_str  = "".join(f"[{t}]" for t in tags)
+                tag_part = f" `{tag_str}`" if tag_str else ""
+                lines.append(f"`{idx}.` {title} ({diff}){tag_part} [link]({url})")
+            embed.add_field(
+                name="Today\'s Problems",
+                value="\n".join(lines),
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="Today\'s Problems",
+                value="_No submissions recorded yet today._",
+                inline=False,
+            )
+
+        await message.reply(embed=embed, mention_author=True)
+        logger.info("Mention stats served for %s (%s).", name, author_id)
+
+
+# ---------------------------------------------------------------------------
+# Slash command registration
+# ---------------------------------------------------------------------------
+
+
+def _register_commands(bot: LeetCodeBot) -> None:
+    """Register all slash commands on the bot's command tree."""
+
+    @bot.tree.command(
+        name="status",
+        description="Show bot status, last run time, and next scheduled run.",
+    )
+    async def status_command(interaction: discord.Interaction) -> None:
+        assert bot.state is not None
+        assert bot.scheduler is not None
+
+        tz = pytz.timezone(config.TIMEZONE)
+        now = datetime.now(tz=tz)
+        last_run = bot.state.get_last_run()
+        week_start = bot.state.get_week_start()
+        msg_id = bot.state.get_message_id()
+
+        embed = discord.Embed(
+            title="🤖 LeetCode Bot Status",
+            color=config.EMBED_COLOR_DAILY,
+        )
+        embed.add_field(
+            name="Status",
+            value="✅ Running",
+            inline=True,
+        )
+        embed.add_field(
+            name="Timezone",
+            value=config.TIMEZONE,
+            inline=True,
+        )
+        embed.add_field(
+            name="Current Time",
+            value=now.strftime("%Y-%m-%d %H:%M:%S"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Last Run",
+            value=last_run.strftime("%Y-%m-%d %H:%M") if last_run else "Never",
+            inline=True,
+        )
+        embed.add_field(
+            name="Week Start",
+            value=week_start.isoformat() if week_start else "Not set",
+            inline=True,
+        )
+        embed.add_field(
+            name="Report Message ID",
+            value=str(msg_id) if msg_id else "Not set",
+            inline=True,
+        )
+
+        profiles = bot.profile_manager.get_enabled_profiles() if bot.profile_manager else []
+        embed.add_field(
+            name="Monitored Users",
+            value=", ".join(p["name"] for p in profiles) or "None",
+            inline=False,
+        )
+
+        embed.add_field(
+            name="Roadmap Problems",
+            value=str(bot.roadmap_manager.total) if bot.roadmap_manager else "0",
+            inline=True,
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info("Status command used by %s.", interaction.user)
+
+    @bot.tree.command(
+        name="run",
+        description="Manually trigger the daily report.",
+    )
+    async def run_command(interaction: discord.Interaction) -> None:
+        assert bot.scheduler is not None
+
+        await interaction.response.send_message(
+            "⏳ Running daily job now... this may take a minute.", ephemeral=True
+        )
+        logger.info("Manual /run triggered by %s.", interaction.user)
+
+        try:
+            await bot.scheduler.trigger_now()
+            await interaction.followup.send("✅ Daily report generated!", ephemeral=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Manual run failed: %s", exc, exc_info=True)
+            await interaction.followup.send(
+                f"❌ Daily run failed: {exc}", ephemeral=True
+            )
+
+    @bot.tree.command(
+        name="leaderboard",
+        description="Show the current weekly leaderboard.",
+    )
+    async def leaderboard_command(interaction: discord.Interaction) -> None:
+        assert bot.state is not None
+        assert bot.leaderboard_manager is not None
+        assert bot.profile_manager is not None
+
+        profiles = bot.profile_manager.get_enabled_profiles()
+        weekly_lb = bot.leaderboard_manager.build_weekly_leaderboard(profiles)
+        daily_lb = bot.leaderboard_manager.build_daily_leaderboard(profiles)
+
+        embed = discord.Embed(
+            title="🏆 Current Leaderboards",
+            color=config.EMBED_COLOR_LEADERBOARD,
+        )
+
+        daily_lines = []
+        for entry in daily_lb:
+            medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+            medal = medals.get(entry["rank"], "")
+            daily_lines.append(
+                f"{medal} **{entry['username']}** — {entry['solved']}"
+            )
+        embed.add_field(
+            name="📅 Today",
+            value="\n".join(daily_lines) or "No data",
+            inline=False,
+        )
+
+        weekly_lines = []
+        for entry in weekly_lb:
+            medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+            medal = medals.get(entry["rank"], "")
+            weekly_lines.append(
+                f"{medal} **{entry['username']}** — {entry['solved']}"
+            )
+        embed.add_field(
+            name="📆 This Week",
+            value="\n".join(weekly_lines) or "No data",
+            inline=False,
+        )
+
+        week_start = bot.state.get_week_start()
+        if week_start:
+            embed.set_footer(text=f"Week started {week_start.strftime('%d %b %Y')}")
+
+        await interaction.response.send_message(embed=embed)
+        logger.info("Leaderboard command used by %s.", interaction.user)
+
+    @bot.tree.command(
+        name="weeksummary",
+        description="Show this week's LeetCode summary with a difficulty breakdown chart.",
+    )
+    async def weeksummary_command(interaction: discord.Interaction) -> None:
+        assert bot.state is not None
+        assert bot.profile_manager is not None
+        assert bot.streak_manager is not None
+
+        await interaction.response.defer()  # chart generation may take a moment
+
+        profiles = bot.profile_manager.get_enabled_profiles()
+        week_start = bot.state.get_week_start()
+
+        # Collect weekly stats per user
+        weekly_data: dict[str, dict] = {}
+        for profile in profiles:
+            name = profile["name"]
+            discord_id = profile.get("discord_id", "")
+            stats = bot.state.get_user_stats(name)
+            current_streak, longest_streak = bot.streak_manager.get(name)
+            weekly_data[name] = {
+                "easy":          stats.get("weekly_easy",   0),
+                "medium":        stats.get("weekly_medium", 0),
+                "hard":          stats.get("weekly_hard",   0),
+                "total":         stats.get("weekly_solved", 0),
+                "discord_id":    discord_id,
+                "streak":        current_streak,
+                "longest":       longest_streak,
+            }
+
+        # Sort by total solved descending
+        sorted_users = sorted(
+            weekly_data.items(), key=lambda x: -x[1]["total"]
+        )
+
+        # Week label
+        week_label = week_start.strftime("%d %b") if week_start else "Current Week"
+
+        # Generate chart in a thread so we don't block the event loop
+        import asyncio
+        import functools
+        from chart_generator import generate_week_chart
+
+        loop = asyncio.get_event_loop()
+        buf = await loop.run_in_executor(
+            None,
+            functools.partial(
+                generate_week_chart,
+                dict(sorted_users),
+                week_label,
+            ),
+        )
+
+        # Build embed
+        embed = discord.Embed(
+            title=f"📊 Weekly Summary — {week_label}",
+            color=config.EMBED_COLOR_WEEKLY,
+        )
+
+        # Per-user stats fields
+        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+        for rank, (name, data) in enumerate(sorted_users, start=1):
+            medal = medals.get(rank, "")
+            did = data["discord_id"]
+            mention = f" <@{did}>" if did else ""
+            total   = data["total"]
+            easy    = data["easy"]
+            medium  = data["medium"]
+            hard    = data["hard"]
+            streak  = data["streak"]
+            longest = data["longest"]
+
+            diff_parts = []
+            if easy:   diff_parts.append(f"Easy: {easy}")
+            if medium: diff_parts.append(f"Medium: {medium}")
+            if hard:   diff_parts.append(f"Hard: {hard}")
+            diff_str = " · ".join(diff_parts) if diff_parts else "—"
+
+            value = (
+                f"{medal} **{total} solved** — {diff_str}\n"
+                f"🔥 Streak: {streak} day{'s' if streak != 1 else ''}  "
+                f"(longest: {longest})"
+            )
+            embed.add_field(
+                name=f"{name}{mention}",
+                value=value,
+                inline=True,
+            )
+
+        if week_start:
+            embed.set_footer(text=f"Week started {week_start.strftime('%d %b %Y')} • resets every Monday")
+
+        # Attach chart image
+        chart_file = discord.File(buf, filename="weeksummary.png")
+        embed.set_image(url="attachment://weeksummary.png")
+
+        await interaction.followup.send(embed=embed, file=chart_file)
+        logger.info("Week summary command used by %s.", interaction.user)
+
+    @bot.tree.command(
+        name="register",
+        description="Link your LeetCode profile to your Discord account.",
+    )
+    @app_commands.describe(
+        name="Your preferred display name",
+        url="Your LeetCode profile URL (e.g., https://leetcode.com/u/username/)"
+    )
+    async def register_command(interaction: discord.Interaction, name: str, url: str) -> None:
+        assert bot.profile_manager is not None
+
+        author_id = str(interaction.user.id)
+        success = bot.profile_manager.add_profile(name, url, author_id)
+        
+        if success:
+            embed = discord.Embed(
+                title="✅ Profile Registered",
+                description=f"Welcome, **{name}**!\nYour profile has been linked: {url}",
+                color=discord.Color.green()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            logger.info("User %s registered as '%s'.", interaction.user, name)
+        else:
+            embed = discord.Embed(
+                title="❌ Invalid URL",
+                description="Please provide a valid LeetCode profile URL.\nExample: `https://leetcode.com/u/your_username/`",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @bot.tree.command(
+        name="unregister",
+        description="Remove your LeetCode profile from the tracker.",
+    )
+    async def unregister_command(interaction: discord.Interaction) -> None:
+        assert bot.profile_manager is not None
+
+        author_id = str(interaction.user.id)
+        removed = bot.profile_manager.remove_profile(author_id)
+        
+        if removed:
+            await interaction.response.send_message(
+                "✅ Your profile has been removed from the tracker.", ephemeral=True
+            )
+            logger.info("User %s unregistered.", interaction.user)
+        else:
+            await interaction.response.send_message(
+                "❌ You are not currently registered.", ephemeral=True
+            )
+
+    @bot.tree.command(
+        name="profile",
+        description="Check which LeetCode profile is linked to your account.",
+    )
+    async def profile_command(interaction: discord.Interaction) -> None:
+        assert bot.profile_manager is not None
+
+        author_id = str(interaction.user.id)
+        profile = bot.profile_manager.get_profile_by_discord_id(author_id)
+        
+        if profile:
+            name = profile["name"]
+            url = profile["leetcode_url"]
+            embed = discord.Embed(
+                title="👤 Your Profile",
+                description=f"**Name:** {name}\n**LeetCode:** [link]({url})",
+                color=config.EMBED_COLOR_DAILY,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                "❌ You do not have a registered profile.\nUse `/register` to link one.",
+                ephemeral=True
+            )
+
+    @bot.tree.command(
+        name="history",
+        description="Fetch the LeetCode summary for a specific date.",
+    )
+    @app_commands.describe(
+        date="Date in YYYY-MM-DD format (e.g., 2026-06-09)",
+        username="Optional: Specific user to fetch problems for"
+    )
+    async def history_command(interaction: discord.Interaction, date: str, username: str | None = None) -> None:
+        assert bot.state is not None
+        assert bot.profile_manager is not None
+        
+        # Validate date format roughly
+        from datetime import date as dt_date
+        try:
+            parsed_date = dt_date.fromisoformat(date)
+            date_str = parsed_date.isoformat()
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid date format. Please use **YYYY-MM-DD** (e.g., `2026-06-09`).",
+                ephemeral=True
+            )
+            return
+
+        profiles = bot.profile_manager.get_enabled_profiles()
+        
+        embed = discord.Embed(
+            title=f"📅 History — {parsed_date.strftime('%A, %d %B %Y')}",
+            color=config.EMBED_COLOR_DAILY,
+        )
+
+        found_any = False
+
+        if username:
+            # Filter for specific user
+            matched = next((p for p in profiles if p["name"].lower() == username.lower()), None)
+            if not matched:
+                await interaction.response.send_message(f"❌ User **{username}** not found.", ephemeral=True)
+                return
+            
+            problems = bot.state.get_day_problems(matched["name"], date_str)
+            if not problems:
+                embed.description = f"**{matched['name']}** did not solve any problems on this date."
+            else:
+                found_any = True
+                lines = []
+                for idx, prob in enumerate(problems, start=1):
+                    title = prob.get("title", prob.get("slug", ""))
+                    diff  = prob.get("difficulty", "")
+                    url   = prob.get("url", "")
+                    tags  = prob.get("tags", [])
+                    tag_str  = "".join(f"[{t}]" for t in tags)
+                    tag_part = f" `{tag_str}`" if tag_str else ""
+                    lines.append(f"`{idx}.` {title} ({diff}){tag_part} [link]({url})")
+                
+                embed.add_field(
+                    name=f"{matched['name']} ({len(problems)} solved)",
+                    value="\n".join(lines),
+                    inline=False,
+                )
+        else:
+            # Summary for all users
+            for profile in profiles:
+                name = profile["name"]
+                problems = bot.state.get_day_problems(name, date_str)
+                if problems:
+                    found_any = True
+                    # Just count by difficulty
+                    easy = sum(1 for p in problems if p.get("difficulty") == "Easy")
+                    med  = sum(1 for p in problems if p.get("difficulty") == "Medium")
+                    hard = sum(1 for p in problems if p.get("difficulty") == "Hard")
+                    
+                    diff_parts = []
+                    if easy: diff_parts.append(f"Easy: {easy}")
+                    if med:  diff_parts.append(f"Med: {med}")
+                    if hard: diff_parts.append(f"Hard: {hard}")
+                    diff_str = " · ".join(diff_parts) if diff_parts else "—"
+
+                    embed.add_field(
+                        name=name,
+                        value=f"**{len(problems)} solved** — {diff_str}",
+                        inline=False,
+                    )
+            
+            if not found_any:
+                embed.description = "No submissions recorded for anyone on this date."
+
+        await interaction.response.send_message(embed=embed)
+        logger.info("History command used by %s for date %s.", interaction.user, date_str)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """Set up logging, create the bot, and run it."""
+    _setup_logging()
+    logger.info("Starting LeetCode Discord Bot...")
+
+    bot = LeetCodeBot()
+
+    # Graceful shutdown on Ctrl+C / SIGTERM
+    loop = asyncio.get_event_loop()
+
+    def _handle_signal() -> None:
+        logger.info("Shutdown signal received.")
+        loop.create_task(bot.close())
+
+    try:
+        loop.add_signal_handler(signal.SIGINT, _handle_signal)
+        loop.add_signal_handler(signal.SIGTERM, _handle_signal)
+    except (NotImplementedError, RuntimeError):
+        # Windows doesn't support add_signal_handler on the event loop
+        pass
+
+    try:
+        bot.run(config.DISCORD_TOKEN, log_handler=None)
+    except discord.LoginFailure:
+        logger.critical(
+            "Invalid Discord token. Check DISCORD_TOKEN in your .env file."
+        )
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("KeyboardInterrupt received — exiting.")
+
+
+if __name__ == "__main__":
+    main()

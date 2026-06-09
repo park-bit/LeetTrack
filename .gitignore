@@ -1,0 +1,26 @@
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Logs
+logs/
+*.log
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data (we use MongoDB now, but don't commit old local files!)
+data/
+*.corrupted.*
+profiles.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
