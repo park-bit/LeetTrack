@@ -220,6 +220,25 @@ class DailyScheduler:
             stats["daily_medium"] = medium
             stats["daily_hard"] = hard
 
+            # Dynamically recalculate weekly count
+            week_start_date = self._state.get_week_start()
+            if week_start_date:
+                w_start = tz.localize(datetime(week_start_date.year, week_start_date.month, week_start_date.day))
+                w_start_ts = int(w_start.timestamp())
+                seen_week: set[str] = set()
+                w_solved = w_easy = w_med = w_hard = 0
+                for s in sorted(submissions, key=lambda x: x.timestamp, reverse=True):
+                    if s.slug not in seen_week and s.timestamp >= w_start_ts:
+                        seen_week.add(s.slug)
+                        w_solved += 1
+                        if s.difficulty == "Easy": w_easy += 1
+                        elif s.difficulty == "Medium": w_med += 1
+                        elif s.difficulty == "Hard": w_hard += 1
+                stats["weekly_solved"] = w_solved
+                stats["weekly_easy"] = w_easy
+                stats["weekly_medium"] = w_med
+                stats["weekly_hard"] = w_hard
+
             # Extend known_accepted (for deduplication on future runs)
             stats["known_accepted"] = list(set(known_slugs + all_new_slugs))
             stats["last_updated"] = today.isoformat()
@@ -241,7 +260,7 @@ class DailyScheduler:
                     },
                 )
 
-            # Leaderboard update (weekly/monthly accumulation)
+            # Leaderboard update (monthly accumulation)
             self._lb_manager.record_daily_solves(name, solved, easy, medium, hard)
 
             # Collect for formatter

@@ -404,30 +404,25 @@ class LeetCodeFetcher:
         profiles: list[dict[str, Any]],
     ) -> dict[str, list[Submission]]:
         """
-        Fetch recent accepted submissions for all enabled profiles.
-
+        Fetch recent accepted submissions for all enabled profiles in parallel.
         Returns a mapping of ``{display_name: [Submission, ...]}``.
-        Failures for individual users are caught and logged; other users
-        continue to be processed.
         """
         results: dict[str, list[Submission]] = {}
+        sem = asyncio.Semaphore(5)
 
-        for profile in profiles:
+        async def _fetch(profile: dict[str, Any]) -> None:
             if not profile.get("enabled", True):
-                continue
-            name: str = profile["name"]
-            url: str = profile["leetcode_url"]
+                return
+            name = profile["name"]
+            url = profile["leetcode_url"]
+            async with sem:
+                try:
+                    # Request up to 100 to ensure we capture the whole week/month
+                    subs = await self.get_recent_submissions(url, limit=100)
+                    results[name] = subs
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Failed to fetch submissions for %s: %s", name, exc)
+                    results[name] = []
 
-            try:
-                subs = await self.get_recent_submissions(url)
-                results[name] = subs
-            except Exception as exc:  # noqa: BLE001
-                logger.error(
-                    "Failed to fetch submissions for %s (%s): %s", name, url, exc
-                )
-                results[name] = []
-
-            # Rate limiting: pause between users
-            await asyncio.sleep(config.RATE_LIMIT_DELAY)
-
+        await asyncio.gather(*[_fetch(p) for p in profiles])
         return results
