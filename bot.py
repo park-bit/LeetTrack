@@ -331,13 +331,22 @@ def _register_commands(bot: LeetCodeBot) -> None:
         assert bot.scheduler is not None
 
         await interaction.response.send_message(
-            "⏳ Running daily job now... this may take a minute.", ephemeral=True
+            "⏳ Running daily job now... this may take a minute."
         )
         logger.info("Manual /run triggered by %s.", interaction.user)
 
         try:
             await bot.scheduler.trigger_now()
-            await interaction.followup.send("✅ Daily report generated!", ephemeral=True)
+            await interaction.edit_original_response(content="✅ Daily report generated!")
+            import asyncio
+            loop = asyncio.get_running_loop()
+            async def _cleanup():
+                await asyncio.sleep(20)
+                try:
+                    await interaction.delete_original_response()
+                except Exception:
+                    pass
+            loop.create_task(_cleanup())
         except Exception as exc:  # noqa: BLE001
             logger.error("Manual run failed: %s", exc, exc_info=True)
             await interaction.followup.send(
