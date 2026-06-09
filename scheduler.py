@@ -56,6 +56,7 @@ class DailyScheduler:
         streak_manager: StreakManager,
         leaderboard_manager: LeaderboardManager,
         discord_manager: DiscordManager,
+        role_manager: "RoleManager" = None,
     ) -> None:
         self._state = state
         self._profile_manager = profile_manager
@@ -63,6 +64,7 @@ class DailyScheduler:
         self._streak_manager = streak_manager
         self._lb_manager = leaderboard_manager
         self._discord_manager = discord_manager
+        self._role_manager = role_manager
 
         tz = pytz.timezone(config.TIMEZONE)
         self._scheduler = AsyncIOScheduler(timezone=tz)
@@ -168,6 +170,11 @@ class DailyScheduler:
         # If it's Monday and a new week hasn't started yet, or week_start is missing
         if is_monday and (stored_week_start is None or stored_week_start != today):
             logger.info("Monday detected — starting new week.")
+            
+            if self._role_manager:
+                last_week_lb = self._lb_manager.get_weekly_leaderboard()
+                await self._role_manager.update_weekly_roles(last_week_lb)
+                
             self._lb_manager.reset_weekly_leaderboard(profiles)
             self._state.set_week_start(today)
         elif stored_week_start is None:
@@ -315,6 +322,11 @@ class DailyScheduler:
         # Update streaks
         solve_counts = {name: daily_stats[name]["solved"] for name in daily_stats}
         self._streak_manager.update_all(solve_counts, today)
+
+        if self._role_manager:
+            all_streaks = self._streak_manager.get_all_streaks()
+            active_streaks = {name: data["current"] for name, data in all_streaks.items()}
+            await self._role_manager.update_streak_roles(active_streaks)
 
         week_start_date = self._state.get_week_start()
 

@@ -44,6 +44,7 @@ from leaderboard_manager import LeaderboardManager
 from discord_manager import DiscordManager
 from scheduler import DailyScheduler
 from duel_manager import DuelManager
+from role_manager import RoleManager
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -105,6 +106,7 @@ class LeetCodeBot(discord.Client):
         self.discord_manager: DiscordManager | None = None
         self.scheduler: DailyScheduler | None = None
         self.duel_manager: DuelManager | None = None
+        self.role_manager: RoleManager | None = None
 
     async def setup_hook(self) -> None:
         """Called by discord.py before connecting — initialise everything."""
@@ -122,6 +124,7 @@ class LeetCodeBot(discord.Client):
         self.leaderboard_manager = LeaderboardManager(self.state)
         self.discord_manager = DiscordManager(self, self.state)
         self.duel_manager = DuelManager(self)
+        self.role_manager = RoleManager(self, self.profile_manager)
 
         self.scheduler = DailyScheduler(
             state=self.state,
@@ -130,6 +133,7 @@ class LeetCodeBot(discord.Client):
             streak_manager=self.streak_manager,
             leaderboard_manager=self.leaderboard_manager,
             discord_manager=self.discord_manager,
+            role_manager=self.role_manager,
         )
 
         # Register slash commands
