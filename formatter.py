@@ -145,3 +145,102 @@ def build_error_embed(title: str, description: str) -> discord.Embed:
         description=description,
         color=config.EMBED_COLOR_ERROR,
     )
+
+# ---------------------------------------------------------------------------
+# Weekly Aggregate Embed Builder
+# ---------------------------------------------------------------------------
+
+def build_weekly_aggregate_embeds(
+    profiles: list[dict[str, Any]],
+    daily_history: list[tuple[date, dict[str, list[dict[str, Any]]]]],
+) -> list[discord.Embed]:
+    """
+    Builds a list of embeds, one for each day in the provided history.
+    Discord allows up to 10 embeds per message, which fits a 7-day week perfectly.
+    """
+    embeds = []
+
+    for d, problems_by_user in daily_history:
+        date_str = d.strftime("%A, %d %B %Y")
+        embed = discord.Embed(
+            title=f"📅 {date_str} (IST)",
+            color=config.EMBED_COLOR_DAILY,
+        )
+
+        found_any = False
+        inactive_names = []
+
+        for profile in profiles:
+            if not profile.get("enabled", True):
+                continue
+
+            name = profile["name"]
+            discord_id: str = profile.get("discord_id", "")
+            problems = problems_by_user.get(name, [])
+
+            if not problems:
+                inactive_names.append(profile)
+                continue
+
+            found_any = True
+            
+            easy = sum(1 for p in problems if p.get("difficulty") == "Easy")
+            medium = sum(1 for p in problems if p.get("difficulty") == "Medium")
+            hard = sum(1 for p in problems if p.get("difficulty") == "Hard")
+
+            diff_parts = []
+            if easy: diff_parts.append(f"Easy: {easy}")
+            if medium: diff_parts.append(f"Med: {medium}")
+            if hard: diff_parts.append(f"Hard: {hard}")
+            diff_str = " · ".join(diff_parts) if diff_parts else "—"
+
+            mention = f" <@{discord_id}>" if discord_id else ""
+            field_name = f"**{name}**{mention} — {len(problems)} solved ({diff_str})"
+
+            lines = []
+            for idx, prob in enumerate(problems, start=1):
+                slug = prob.get("slug", "")
+                title = prob.get("title", slug)
+                diff = prob.get("difficulty", "Unknown")
+                url = prob.get("url", f"https://leetcode.com/problems/{slug}/")
+                tags = prob.get("tags", [])
+                tag_str = "".join(f"[{t}]" for t in tags)
+                tag_part = f" `{tag_str}`" if tag_str else ""
+                lines.append(f"`{idx}.` {title} ({diff}){tag_part} [link]({url})")
+
+            # Discord field value limit is 1024. If it exceeds, we should ideally truncate, 
+            # but for 15 problems it should be fine.
+            val = "\n".join(lines)
+            if len(val) > 1024:
+                val = val[:1000] + "\n... (truncated)"
+
+            embed.add_field(name=field_name, value=val, inline=False)
+
+        if not found_any:
+            embed.description = "No submissions recorded for anyone on this date."
+        else:
+            if inactive_names:
+                mentions = []
+                for p in inactive_names:
+                    if p.get("discord_id"):
+                        mentions.append(f"<@{p['discord_id']}>")
+                    else:
+                        mentions.append(f"`{p['name']}`")
+                
+                # Split into chunks if there are too many inactive users to fit in 1024 chars
+                mentions_str = " ".join(mentions)
+                if len(mentions_str) > 1024:
+                    mentions_str = mentions_str[:1000] + "..."
+                    
+                embed.add_field(
+                    name="No submissions",
+                    value=mentions_str,
+                    inline=False
+                )
+
+        embeds.append(embed)
+
+    if embeds:
+        embeds[-1].set_footer(text="Updates daily at midnight. Run /run to sync.")
+
+    return embeds
