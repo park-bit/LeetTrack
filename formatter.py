@@ -160,7 +160,13 @@ def build_weekly_aggregate_embeds(
     """
     embeds = []
 
-    colors = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤"]
+    user_colors = {
+        "park-bit": "🟠",
+        "lilght01": "🔵",
+        "Yuuta_1678": "🟢",
+        "vedant_ghate": "🔴"
+    }
+    default_color = "🟤"
     
     for d, problems_by_user in daily_history:
         date_str = d.strftime("%A, %d %B %Y")
@@ -180,7 +186,7 @@ def build_weekly_aggregate_embeds(
             discord_id: str = profile.get("discord_id", "")
             problems = problems_by_user.get(name, [])
             
-            color_emoji = colors[p_idx % len(colors)]
+            color_emoji = user_colors.get(name, default_color)
 
             if not problems:
                 inactive_names.append(profile)
@@ -247,7 +253,7 @@ def build_weekly_aggregate_embeds(
                 mentions = []
                 for p_idx, p in enumerate(profiles):
                     if p in inactive_names:
-                        c_emoji = colors[p_idx % len(colors)]
+                        c_emoji = user_colors.get(p["name"], default_color)
                         if p.get("discord_id"):
                             mentions.append(f"{c_emoji} <@{p['discord_id']}>")
                         else:
