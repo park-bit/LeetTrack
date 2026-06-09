@@ -493,6 +493,24 @@ def _register_commands(bot: LeetCodeBot) -> None:
             await interaction.followup.send(f"❌ Error during manual nudge: `{e}`")
 
     @bot.tree.command(
+        name="potd",
+        description="Manually fetch and post today's LeetCode Problem of the Day.",
+    )
+    async def potd_command(interaction: discord.Interaction) -> None:
+        assert bot.scheduler is not None
+        
+        await interaction.response.defer()
+        
+        try:
+            await bot.scheduler.run_potd()
+            msg = await interaction.followup.send("✅ Problem of the Day posted!")
+            import asyncio
+            asyncio.create_task(msg.delete(delay=60.0))
+        except Exception as e:
+            logger.error("Error during manual POTD: %s", e)
+            await interaction.followup.send(f"❌ Error during manual POTD: `{e}`")
+
+    @bot.tree.command(
         name="weeksummary",
         description="Show this week's LeetCode summary with a difficulty breakdown chart.",
     )

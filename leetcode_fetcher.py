@@ -99,6 +99,22 @@ query userPublicProfile($username: String!) {
   }
 }
 """
+_POTD_QUERY = """
+query questionOfToday {
+  activeDailyCodingChallengeQuestion {
+    date
+    link
+    question {
+      difficulty
+      title
+      titleSlug
+      topicTags {
+        name
+      }
+    }
+  }
+}
+"""
 
 _PROBLEM_DETAIL_QUERY = """
 query problemDetail($titleSlug: String!) {
@@ -394,6 +410,30 @@ class LeetCodeFetcher:
         # Small delay to avoid hammering the API
         await asyncio.sleep(0.3)
         return difficulty, tags
+
+    # ------------------------------------------------------------------
+    # Problem of the Day
+    # ------------------------------------------------------------------
+
+    async def get_potd(self) -> dict[str, Any] | None:
+        """Fetch the current Problem of the Day."""
+        data = await self._graphql(_POTD_QUERY)
+        if not data:
+            return None
+            
+        challenge = data.get("activeDailyCodingChallengeQuestion")
+        if not challenge:
+            return None
+            
+        question = challenge.get("question", {})
+        return {
+            "date": challenge.get("date"),
+            "link": challenge.get("link"),
+            "title": question.get("title"),
+            "slug": question.get("titleSlug"),
+            "difficulty": question.get("difficulty"),
+            "tags": [t["name"] for t in question.get("topicTags", [])],
+        }
 
     # ------------------------------------------------------------------
     # Batch multi-user fetch

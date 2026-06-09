@@ -290,6 +290,38 @@ class DiscordManager:
         except discord.HTTPException as exc:
             logger.error("Could not send nudge ping: %s", exc)
 
+    async def send_potd(self, potd_data: dict[str, Any]) -> None:
+        """
+        Send the Problem of the Day to the main channel.
+        """
+        if not potd_data:
+            return
+            
+        channel = await self.get_channel()
+        
+        diff_color = {
+            "Easy": discord.Color.green(),
+            "Medium": discord.Color.gold(),
+            "Hard": discord.Color.red(),
+        }.get(potd_data["difficulty"], discord.Color.blue())
+        
+        url = f"{config.LEETCODE_BASE_URL}{potd_data['link']}"
+        
+        embed = discord.Embed(
+            title="🎯 LeetCode Problem of the Day",
+            description=f"**[{potd_data['title']}]({url})**\n\n"
+                        f"**Difficulty:** {potd_data['difficulty']}\n"
+                        f"**Topics:** {', '.join(potd_data['tags']) if potd_data['tags'] else 'None'}",
+            color=diff_color,
+        )
+        embed.set_footer(text=f"Date: {potd_data['date']}")
+        
+        try:
+            await channel.send(embed=embed)
+            logger.info("Sent POTD to Discord.")
+        except discord.HTTPException as exc:
+            logger.error("Could not send POTD: %s", exc)
+
     # ------------------------------------------------------------------
     # Archive channel  (permanent file uploads)
     # ------------------------------------------------------------------

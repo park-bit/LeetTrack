@@ -100,6 +100,16 @@ class DailyScheduler:
             max_instances=1,
         )
 
+        # Problem of the Day at 20:00 (8 PM)
+        self._scheduler.add_job(
+            self.run_potd,
+            CronTrigger(hour=20, minute=0, timezone=tz_str),
+            id="potd_job",
+            name="Problem of the Day",
+            max_instances=1,
+            misfire_grace_time=300,
+        )
+
         # Evening Nudge Ping at 22:00
         self._scheduler.add_job(
             self.run_evening_nudge,
@@ -529,3 +539,17 @@ class DailyScheduler:
             )
         except OSError as exc:
             logger.error("Could not write daily report archive: %s", exc)
+
+    async def run_potd(self) -> None:
+        """Fetch the LeetCode POTD and post it to Discord."""
+        logger.info("Running Problem of the Day check...")
+        try:
+            async with LeetCodeFetcher() as fetcher:
+                potd_data = await fetcher.get_potd()
+                
+            if potd_data:
+                await self._discord_manager.send_potd(potd_data)
+            else:
+                logger.warning("Failed to fetch POTD data.")
+        except Exception as exc:
+            logger.error("Error running POTD job: %s", exc)
