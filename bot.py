@@ -375,7 +375,22 @@ def _register_commands(bot: LeetCodeBot) -> None:
             await interaction.followup.send(
                 f"❌ Error during manual run: {exc}", ephemeral=True
             )
-
+    @bot.tree.command(
+        name="roll",
+        description="Force the bot to post a brand new message for the current week.",
+    )
+    async def roll_command(interaction: discord.Interaction) -> None:
+        assert bot.scheduler is not None
+        await interaction.response.defer()
+        
+        try:
+            await bot.scheduler.trigger_now(force_new_message=True)
+            await interaction.followup.send("✅ Successfully rolled out a new message for the week!")
+        except Exception as exc:
+            logger.exception("Error during /roll")
+            await interaction.followup.send(
+                f"❌ Error during manual roll: {exc}", ephemeral=True
+            )
 
 
     @bot.tree.command(

@@ -116,7 +116,7 @@ class DailyScheduler:
     # Daily job
     # ------------------------------------------------------------------
 
-    async def run_daily_job(self) -> None:
+    async def run_daily_job(self, force_new_message: bool = False) -> None:
         """
         Main daily job executed at midnight.
 
@@ -305,18 +305,36 @@ class DailyScheduler:
 
         week_start_date = self._state.get_week_start()
 
-        # Build embeds (minimal: no leaderboard, no roadmap)
-        embeds = formatter.build_daily_embed(
-            today=today,
-            today_ts=today_noon_ts,
+        # Gather history for all days from week_start to today
+        daily_history = []
+        if week_start_date:
+            delta_days = (today - week_start_date).days
+            if delta_days < 0:
+                delta_days = 0
+            
+            # Add past days up to yesterday
+            for i in range(delta_days):
+                d = week_start_date + timedelta(days=i)
+                probs = {}
+                for p in profiles:
+                    name = p["name"]
+                    day_probs = self._state.get_day_problems(name, d.isoformat())
+                    if day_probs:
+                        probs[name] = day_probs
+                daily_history.append((d, probs))
+
+        # Add today's problems to the end of the history stack
+        daily_history.append((today, daily_problems))
+
+        # Build multiple embeds (one for each day)
+        embeds = formatter.build_weekly_aggregate_embeds(
             profiles=profiles,
-            daily_problems=daily_problems,
-            daily_stats=daily_stats,
+            daily_history=daily_history,
         )
 
         # Publish to Discord
-        if is_monday and (self._state.get_week_start() == today):
-            # First Monday of new week — send a fresh message
+        if force_new_message or (is_monday and (self._state.get_week_start() == today)):
+            # First Monday of new week OR forced by /roll — send a fresh message
             await self._discord_manager.start_new_week(embeds)
         else:
             await self._discord_manager.publish_or_update(embeds)
@@ -351,10 +369,10 @@ class DailyScheduler:
     # Manual trigger (for testing / on-demand runs)
     # ------------------------------------------------------------------
 
-    async def trigger_now(self) -> None:
-        """Manually trigger the daily job (useful for initial testing)."""
-        logger.info("Manual daily job trigger requested.")
-        await self.run_daily_job()
+    async def trigger_now(self, force_new_message: bool = False) -> None:
+        """Manually trigger the daily job (useful for initial testing or /roll)."""
+        logger.info("Manual daily job trigger requested. (force_new_message=%s)", force_new_message)
+        await self.run_daily_job(force_new_message=force_new_message)
 
     # ------------------------------------------------------------------
     # Local report archiving
