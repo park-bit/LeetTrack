@@ -471,16 +471,41 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
         # Collect weekly stats per user
         weekly_data: dict[str, dict] = {}
+        
+        from datetime import datetime, timedelta
+        import pytz
+        import config
+        today = datetime.now(tz=pytz.timezone(config.TIMEZONE)).date()
+        
+        if week_start:
+            delta_days = (today - week_start).days
+            if delta_days < 0: delta_days = 0
+            dates_in_week = [week_start + timedelta(days=i) for i in range(delta_days + 1)]
+        else:
+            dates_in_week = [today]
+
         for profile in profiles:
             name = profile["name"]
             discord_id = profile.get("discord_id", "")
-            stats = bot.state.get_user_stats(name)
             current_streak, longest_streak = bot.streak_manager.get(name)
+            
+            solved = 0
+            easy = 0
+            medium = 0
+            hard = 0
+            
+            for d in dates_in_week:
+                probs = bot.state.get_day_problems(name, d.isoformat())
+                solved += len(probs)
+                easy += sum(1 for p in probs if p.get("difficulty") == "Easy")
+                medium += sum(1 for p in probs if p.get("difficulty") == "Medium")
+                hard += sum(1 for p in probs if p.get("difficulty") == "Hard")
+
             weekly_data[name] = {
-                "easy":          stats.get("weekly_easy",   0),
-                "medium":        stats.get("weekly_medium", 0),
-                "hard":          stats.get("weekly_hard",   0),
-                "total":         stats.get("weekly_solved", 0),
+                "easy":          easy,
+                "medium":        medium,
+                "hard":          hard,
+                "total":         solved,
                 "discord_id":    discord_id,
                 "streak":        current_streak,
                 "longest":       longest_streak,
