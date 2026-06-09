@@ -51,7 +51,7 @@ def build_daily_embed(
     """
     embed = discord.Embed(
         title="📅 Daily LeetCode Report",
-        description=f"<t:{today_ts}:F>",
+        description=f"<t:{today_ts}:D>",
         color=config.EMBED_COLOR_DAILY,
     )
     embed.set_footer(text="Updates daily at midnight")
