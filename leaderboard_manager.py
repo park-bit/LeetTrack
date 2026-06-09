@@ -13,10 +13,12 @@ Ranking criteria (descending priority):
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
+import pytz
 from typing import Any
 
 from state_manager import StateManager
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -72,18 +74,26 @@ class LeaderboardManager:
         """
         entries: list[dict[str, Any]] = []
 
+        today_iso = datetime.now(tz=pytz.timezone(config.TIMEZONE)).date().isoformat()
+
         for profile in profiles:
             if not profile.get("enabled", True):
                 continue
             name = profile["name"]
-            stats = self._state.get_user_stats(name)
+            
+            probs = self._state.get_day_problems(name, today_iso)
+            solved = len(probs)
+            easy = sum(1 for p in probs if p.get("difficulty") == "Easy")
+            medium = sum(1 for p in probs if p.get("difficulty") == "Medium")
+            hard = sum(1 for p in probs if p.get("difficulty") == "Hard")
+            
             entries.append(
                 {
                     "username": name,
-                    "solved": stats.get("daily_solved", 0),
-                    "easy": stats.get("daily_easy", 0),
-                    "medium": stats.get("daily_medium", 0),
-                    "hard": stats.get("daily_hard", 0),
+                    "solved": solved,
+                    "easy": easy,
+                    "medium": medium,
+                    "hard": hard,
                 }
             )
 
@@ -109,18 +119,40 @@ class LeaderboardManager:
         """
         entries: list[dict[str, Any]] = []
 
+        week_start = self._state.get_week_start()
+        today = datetime.now(tz=pytz.timezone(config.TIMEZONE)).date()
+        
+        if week_start:
+            delta_days = (today - week_start).days
+            if delta_days < 0: delta_days = 0
+            dates_in_week = [week_start + timedelta(days=i) for i in range(delta_days + 1)]
+        else:
+            dates_in_week = [today]
+
         for profile in profiles:
             if not profile.get("enabled", True):
                 continue
             name = profile["name"]
-            stats = self._state.get_user_stats(name)
+            
+            solved = 0
+            easy = 0
+            medium = 0
+            hard = 0
+            
+            for d in dates_in_week:
+                probs = self._state.get_day_problems(name, d.isoformat())
+                solved += len(probs)
+                easy += sum(1 for p in probs if p.get("difficulty") == "Easy")
+                medium += sum(1 for p in probs if p.get("difficulty") == "Medium")
+                hard += sum(1 for p in probs if p.get("difficulty") == "Hard")
+
             entries.append(
                 {
                     "username": name,
-                    "solved": stats.get("weekly_solved", 0),
-                    "easy": stats.get("weekly_easy", 0),
-                    "medium": stats.get("weekly_medium", 0),
-                    "hard": stats.get("weekly_hard", 0),
+                    "solved": solved,
+                    "easy": easy,
+                    "medium": medium,
+                    "hard": hard,
                 }
             )
 
