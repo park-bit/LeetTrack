@@ -160,6 +160,8 @@ def build_weekly_aggregate_embeds(
     """
     embeds = []
 
+    colors = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "🟤"]
+    
     for d, problems_by_user in daily_history:
         date_str = d.strftime("%A, %d %B %Y")
         embed = discord.Embed(
@@ -170,13 +172,15 @@ def build_weekly_aggregate_embeds(
         found_any = False
         inactive_names = []
 
-        for profile in profiles:
+        for p_idx, profile in enumerate(profiles):
             if not profile.get("enabled", True):
                 continue
 
             name = profile["name"]
             discord_id: str = profile.get("discord_id", "")
             problems = problems_by_user.get(name, [])
+            
+            color_emoji = colors[p_idx % len(colors)]
 
             if not problems:
                 inactive_names.append(profile)
@@ -194,10 +198,14 @@ def build_weekly_aggregate_embeds(
             if hard: diff_parts.append(f"Hard: {hard}")
             diff_str = " · ".join(diff_parts) if diff_parts else "—"
 
-            mention = f" <@{discord_id}>" if discord_id else ""
-            field_name = f"**{name}**{mention} — {len(problems)} solved ({diff_str})"
+            # Put color in field name, but NOT the mention (Discord fields don't parse mentions in names)
+            field_name = f"{color_emoji} **{name}** — {len(problems)} solved ({diff_str})"
 
             lines = []
+            # Mentions only render in field values!
+            if discord_id:
+                lines.append(f"👤 <@{discord_id}>")
+                
             for idx, prob in enumerate(problems, start=1):
                 slug = prob.get("slug", "")
                 title = prob.get("title", slug)
@@ -208,24 +216,42 @@ def build_weekly_aggregate_embeds(
                 tag_part = f" `{tag_str}`" if tag_str else ""
                 lines.append(f"`{idx}.` {title} ({diff}){tag_part} [link]({url})")
 
-            # Discord field value limit is 1024. If it exceeds, we should ideally truncate, 
-            # but for 15 problems it should be fine.
-            val = "\n".join(lines)
-            if len(val) > 1024:
-                val = val[:1000] + "\n... (truncated)"
+            # Discord field value limit is 1024. Split into chunks to prevent truncation.
+            chunks = []
+            current_chunk = []
+            current_len = 0
+            
+            for line in lines:
+                line_len = len(line) + 1 # +1 for newline
+                if current_len + line_len > 1000:
+                    chunks.append("\n".join(current_chunk))
+                    current_chunk = [line]
+                    current_len = line_len
+                else:
+                    current_chunk.append(line)
+                    current_len += line_len
+                    
+            if current_chunk:
+                chunks.append("\n".join(current_chunk))
 
-            embed.add_field(name=field_name, value=val, inline=False)
+            for i, chunk_val in enumerate(chunks):
+                if i == 0:
+                    embed.add_field(name=field_name, value=chunk_val, inline=False)
+                else:
+                    embed.add_field(name=f"{color_emoji} **{name}** (continued)", value=chunk_val, inline=False)
 
         if not found_any:
             embed.description = "No submissions recorded for anyone on this date."
         else:
             if inactive_names:
                 mentions = []
-                for p in inactive_names:
-                    if p.get("discord_id"):
-                        mentions.append(f"<@{p['discord_id']}>")
-                    else:
-                        mentions.append(f"`{p['name']}`")
+                for p_idx, p in enumerate(profiles):
+                    if p in inactive_names:
+                        c_emoji = colors[p_idx % len(colors)]
+                        if p.get("discord_id"):
+                            mentions.append(f"{c_emoji} <@{p['discord_id']}>")
+                        else:
+                            mentions.append(f"{c_emoji} `{p['name']}`")
                 
                 # Split into chunks if there are too many inactive users to fit in 1024 chars
                 mentions_str = " ".join(mentions)

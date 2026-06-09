@@ -364,7 +364,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
             import asyncio
             loop = asyncio.get_running_loop()
             async def _cleanup():
-                await asyncio.sleep(20)
+                await asyncio.sleep(30)
                 try:
                     await interaction.delete_original_response()
                 except Exception:
@@ -385,7 +385,18 @@ def _register_commands(bot: LeetCodeBot) -> None:
         
         try:
             await bot.scheduler.trigger_now(force_new_message=True)
-            await interaction.followup.send("✅ Successfully rolled out a new message for the week!")
+            msg = await interaction.followup.send("✅ Successfully rolled out a new message for the week!")
+            
+            import asyncio
+            loop = asyncio.get_running_loop()
+            async def _cleanup_roll():
+                await asyncio.sleep(30)
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+            loop.create_task(_cleanup_roll())
+            
         except Exception as exc:
             logger.exception("Error during /roll")
             await interaction.followup.send(
