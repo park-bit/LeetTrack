@@ -173,9 +173,8 @@ class DailyScheduler:
         daily_stats: dict[str, dict[str, int]] = {}
 
         tz = pytz.timezone(config.TIMEZONE)
-        today_start_ts = int(
-            datetime(today.year, today.month, today.day, 0, 0, 0, tzinfo=tz).timestamp()
-        )
+        today_dt = tz.localize(datetime(today.year, today.month, today.day, 0, 0, 0))
+        today_start_ts = int(today_dt.timestamp())
         today_end_ts = today_start_ts + 86400
         # Unix timestamp at noon today — used by Discord's <t:TS:D> rendering
         today_noon_ts = today_start_ts + 43200

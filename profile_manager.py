@@ -54,10 +54,7 @@ class ProfileManager:
         raw = db.read_data("profiles.json", config.PROFILES_FILE, None)
 
         if raw is None:
-            logger.warning(
-                "profiles.json not found in DB or disk. Creating example file locally."
-            )
-            self._create_example()
+            logger.info("profiles.json not found in DB or disk. Starting with empty profiles.")
             self._profiles = []
             return
 

@@ -29,8 +29,11 @@ class StreakManager:
     Usage::
 
         sm = StateManager(); sm.load()
-        streak_mgr = StreakManager(sm)
-        streak_mgr.update("Parth", solved_today=True, today=date.today())
+        import pytz
+        from datetime import datetime
+        import config
+        tz = pytz.timezone(config.TIMEZONE)
+        streak_mgr.update("Parth", solved_today=True, today=datetime.now(tz).date())
         current, longest = streak_mgr.get("Parth")
     """
 

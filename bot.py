@@ -197,8 +197,10 @@ class LeetCodeBot(discord.Client):
         stats = self.state.get_user_stats(name)
         current_streak, longest_streak = self.streak_manager.get(name)
 
-        from datetime import date
-        today_str = date.today().isoformat()
+        import pytz
+        from datetime import datetime
+        tz = pytz.timezone(config.TIMEZONE)
+        today_str = datetime.now(tz).date().isoformat()
         today_problems = self.state.get_day_problems(name, today_str)
 
         embed = discord.Embed(
