@@ -184,9 +184,20 @@ class LeaderboardManager:
         hard: int,
     ) -> None:
         """
-        Update monthly running totals for *username*.
+        Update weekly and monthly running totals for *username*.
+
+        Daily totals are stored in user_stats and reset each day by the
+        scheduler.  Weekly/monthly totals accumulate until explicitly reset.
         """
         stats = self._state.get_user_stats(username)
+
+        # Weekly accumulation
+        stats["weekly_solved"] = stats.get("weekly_solved", 0) + solved
+        stats["weekly_easy"] = stats.get("weekly_easy", 0) + easy
+        stats["weekly_medium"] = stats.get("weekly_medium", 0) + medium
+        stats["weekly_hard"] = stats.get("weekly_hard", 0) + hard
+
+        self._state.set_user_stats(username, stats)
 
         # Monthly accumulation (kept separately in state root)
         self._state.update_monthly_leaderboard(username, solved)

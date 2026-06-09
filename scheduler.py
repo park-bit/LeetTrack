@@ -170,9 +170,7 @@ class DailyScheduler:
 
         # Fetch submissions
         async with LeetCodeFetcher() as fetcher:
-            user_submissions: dict[str, list[Submission]] = (
-                await fetcher.fetch_all_users(profiles)
-            )
+            user_data = await fetcher.fetch_all_users(profiles)
 
         # Process each user
         daily_problems: dict[str, list[dict[str, Any]]] = {}
@@ -187,7 +185,7 @@ class DailyScheduler:
 
         for profile in profiles:
             name = profile["name"]
-            submissions = user_submissions.get(name, [])
+            submissions, lc_stats = user_data.get(name, ([], None))
 
             stats = self._state.get_user_stats(name)
             known_slugs: list[str] = stats.get("known_accepted", [])
@@ -215,35 +213,43 @@ class DailyScheduler:
                 s.slug for s in submissions if s.slug not in known_slugs
             ]
 
-            easy = sum(1 for s in today_subs if s.difficulty == "Easy")
-            medium = sum(1 for s in today_subs if s.difficulty == "Medium")
-            hard = sum(1 for s in today_subs if s.difficulty == "Hard")
-            solved = len(today_subs)
+            # Exact delta calculation using LeetCode's lifetime counts
+            # This completely bypasses the 15-item limit on recent submissions!
+            if lc_stats:
+                old_total = stats.get("total_solved", 0)
+                old_easy = stats.get("easy", 0)
+                old_medium = stats.get("medium", 0)
+                old_hard = stats.get("hard", 0)
+
+                # Only calculate delta if we had a previous run, otherwise fallback to the len of today_subs
+                if old_total > 0:
+                    solved = max(0, lc_stats.total_solved - old_total)
+                    easy = max(0, lc_stats.easy_solved - old_easy)
+                    medium = max(0, lc_stats.medium_solved - old_medium)
+                    hard = max(0, lc_stats.hard_solved - old_hard)
+                else:
+                    easy = sum(1 for s in today_subs if s.difficulty == "Easy")
+                    medium = sum(1 for s in today_subs if s.difficulty == "Medium")
+                    hard = sum(1 for s in today_subs if s.difficulty == "Hard")
+                    solved = len(today_subs)
+
+                # Update the baseline for tomorrow
+                stats["total_solved"] = lc_stats.total_solved
+                stats["easy"] = lc_stats.easy_solved
+                stats["medium"] = lc_stats.medium_solved
+                stats["hard"] = lc_stats.hard_solved
+            else:
+                # Fallback if API completely failed
+                easy = sum(1 for s in today_subs if s.difficulty == "Easy")
+                medium = sum(1 for s in today_subs if s.difficulty == "Medium")
+                hard = sum(1 for s in today_subs if s.difficulty == "Hard")
+                solved = len(today_subs)
 
             # Update daily stats in state
             stats["daily_solved"] = solved
             stats["daily_easy"] = easy
             stats["daily_medium"] = medium
             stats["daily_hard"] = hard
-
-            # Dynamically recalculate weekly count
-            week_start_date = self._state.get_week_start()
-            if week_start_date:
-                w_start = tz.localize(datetime(week_start_date.year, week_start_date.month, week_start_date.day))
-                w_start_ts = int(w_start.timestamp())
-                seen_week: set[str] = set()
-                w_solved = w_easy = w_med = w_hard = 0
-                for s in sorted(submissions, key=lambda x: x.timestamp, reverse=True):
-                    if s.slug not in seen_week and s.timestamp >= w_start_ts:
-                        seen_week.add(s.slug)
-                        w_solved += 1
-                        if s.difficulty == "Easy": w_easy += 1
-                        elif s.difficulty == "Medium": w_med += 1
-                        elif s.difficulty == "Hard": w_hard += 1
-                stats["weekly_solved"] = w_solved
-                stats["weekly_easy"] = w_easy
-                stats["weekly_medium"] = w_med
-                stats["weekly_hard"] = w_hard
 
             # Extend known_accepted (for deduplication on future runs)
             stats["known_accepted"] = list(set(known_slugs + all_new_slugs))

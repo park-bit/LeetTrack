@@ -402,12 +402,12 @@ class LeetCodeFetcher:
     async def fetch_all_users(
         self,
         profiles: list[dict[str, Any]],
-    ) -> dict[str, list[Submission]]:
+    ) -> dict[str, tuple[list[Submission], UserStats | None]]:
         """
-        Fetch recent accepted submissions for all enabled profiles in parallel.
-        Returns a mapping of ``{display_name: [Submission, ...]}``.
+        Fetch recent accepted submissions and exact user stats for all enabled profiles in parallel.
+        Returns a mapping of ``{display_name: (list[Submission], UserStats | None)}``.
         """
-        results: dict[str, list[Submission]] = {}
+        results: dict[str, tuple[list[Submission], UserStats | None]] = {}
         sem = asyncio.Semaphore(5)
 
         async def _fetch(profile: dict[str, Any]) -> None:
@@ -417,12 +417,13 @@ class LeetCodeFetcher:
             url = profile["leetcode_url"]
             async with sem:
                 try:
-                    # Request up to 100 to ensure we capture the whole week/month
+                    # Request up to 100 (though LeetCode internally caps at 15-20)
                     subs = await self.get_recent_submissions(url, limit=100)
-                    results[name] = subs
+                    stats = await self.get_user_stats(url)
+                    results[name] = (subs, stats)
                 except Exception as exc:  # noqa: BLE001
-                    logger.error("Failed to fetch submissions for %s: %s", name, exc)
-                    results[name] = []
+                    logger.error("Failed to fetch data for %s: %s", name, exc)
+                    results[name] = ([], None)
 
         await asyncio.gather(*[_fetch(p) for p in profiles])
         return results
