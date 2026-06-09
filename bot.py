@@ -511,6 +511,63 @@ def _register_commands(bot: LeetCodeBot) -> None:
             await interaction.followup.send(f"❌ Error during manual POTD: `{e}`")
 
     @bot.tree.command(
+        name="roadmap",
+        description="Check NeetCode 150 progress for yourself or another user.",
+    )
+    async def roadmap_command(
+        interaction: discord.Interaction,
+        target_user: discord.Member | None = None,
+    ) -> None:
+        assert bot.state is not None
+        assert bot.profile_manager is not None
+        
+        await interaction.response.defer()
+        
+        if target_user:
+            member_id = target_user.id
+            profile = bot.profile_manager.get_profile_by_discord_id(str(member_id))
+            if not profile:
+                await interaction.followup.send(f"❌ <@{member_id}> is not registered in profiles.json.")
+                return
+            name = profile["name"]
+        else:
+            member_id = interaction.user.id
+            profile = bot.profile_manager.get_profile_by_discord_id(str(member_id))
+            if not profile:
+                await interaction.followup.send("❌ You are not registered in profiles.json. Provide a user via `/roadmap @user`.")
+                return
+            name = profile["name"]
+            
+        stats = bot.state.get_user_stats(name)
+        known_accepted = stats.get("known_accepted", [])
+        
+        import json
+        try:
+            with open("roadmap.json", "r", encoding="utf-8") as f:
+                roadmap = json.load(f)
+        except Exception:
+            await interaction.followup.send("❌ Could not load roadmap.json.")
+            return
+            
+        solved_roadmap = set(known_accepted) & set(roadmap.keys())
+        total_roadmap = len(roadmap)
+        solved_count = len(solved_roadmap)
+        percentage = (solved_count / total_roadmap) * 100 if total_roadmap > 0 else 0
+        
+        # Build progress bar [████████░░]
+        bar_length = 20
+        filled_length = int(bar_length * solved_count // total_roadmap) if total_roadmap > 0 else 0
+        bar = "█" * filled_length + "░" * (bar_length - filled_length)
+        
+        embed = discord.Embed(
+            title=f"🗺️ NeetCode 150 Progress: {name}",
+            description=f"**[{bar}] {percentage:.1f}%**\n\n**{solved_count} / {total_roadmap}** problems solved.",
+            color=discord.Color.purple()
+        )
+        
+        await interaction.followup.send(embed=embed)
+
+    @bot.tree.command(
         name="weeksummary",
         description="Show this week's LeetCode summary with a difficulty breakdown chart.",
     )
