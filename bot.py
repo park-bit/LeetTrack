@@ -506,12 +506,15 @@ def _register_commands(bot: LeetCodeBot) -> None:
             diff_str = " · ".join(diff_parts) if diff_parts else "—"
 
             value = (
+                f"{mention}\n" if mention else ""
+            )
+            value += (
                 f"{medal} **{total} solved** — {diff_str}\n"
                 f"🔥 Streak: {streak} day{'s' if streak != 1 else ''}  "
                 f"(longest: {longest})"
             )
             embed.add_field(
-                name=f"{name}{mention}",
+                name=name,
                 value=value,
                 inline=True,
             )
