@@ -612,6 +612,103 @@ def _register_commands(bot: LeetCodeBot) -> None:
         logger.info("Week summary command used by %s.", interaction.user)
 
     @bot.tree.command(
+        name="profile",
+        description="View a beautiful profile card for yourself or another user.",
+    )
+    @app_commands.describe(
+        user="Optional: Tag someone to view their profile instead of yours."
+    )
+    async def profile_command(interaction: discord.Interaction, user: discord.Member = None) -> None:
+        assert bot.profile_manager is not None
+        assert bot.streak_manager is not None
+        
+        await interaction.response.defer()
+
+        target_id = str(user.id) if user else str(interaction.user.id)
+        profiles = bot.profile_manager.get_enabled_profiles()
+        
+        matched = next(
+            (p for p in profiles if p.get("discord_id") == target_id),
+            None,
+        )
+        
+        if not matched:
+            msg = "❌ The selected user isn't linked to a LeetCode profile." if user else "❌ You aren't linked to a LeetCode profile. Use `/register` first."
+            await interaction.followup.send(msg)
+            return
+            
+        name = matched["name"]
+        
+        from leetcode_fetcher import LeetcodeFetcher
+        fetcher = LeetcodeFetcher()
+        stats = await fetcher.fetch_user_profile(name)
+        
+        if not stats:
+            await interaction.followup.send(f"❌ Failed to fetch LeetCode profile for **{name}**. Check if the username is correct.")
+            return
+
+        current_streak, longest_streak = bot.streak_manager.get(name)
+        
+        user_colors = {
+            "park-bit": "🟠",
+            "lilght01": "🔵",
+            "Yuuta_1678": "🟢",
+            "vedant_ghate": "🔴"
+        }
+        emoji = user_colors.get(name, "👤")
+        
+        embed = discord.Embed(
+            title=f"{emoji} {name}'s LeetCode Profile",
+            url=f"https://leetcode.com/u/{name}/",
+            color=config.EMBED_COLOR_DAILY,
+        )
+        
+        # We can use the discord member's avatar if they are in the server
+        target_member = user or interaction.user
+        embed.set_thumbnail(url=target_member.display_avatar.url)
+        
+        embed.add_field(
+            name="🏆 Ranking",
+            value=f"**{stats.ranking:,}**" if stats.ranking else "Unranked",
+            inline=True
+        )
+        embed.add_field(
+            name="🔥 Server Streak",
+            value=f"**{current_streak}** days\n(Longest: {longest_streak})",
+            inline=True
+        )
+        embed.add_field(name="\u200b", value="\u200b", inline=False) # blank line
+        
+        embed.add_field(
+            name="Total Solved",
+            value=f"**{stats.total_solved}** problems",
+            inline=False
+        )
+
+        import asyncio
+        import functools
+        from chart_generator import generate_profile_donut_chart
+
+        loop = asyncio.get_event_loop()
+        buf = await loop.run_in_executor(
+            None,
+            functools.partial(
+                generate_profile_donut_chart,
+                stats.easy_solved,
+                stats.medium_solved,
+                stats.hard_solved,
+                name
+            ),
+        )
+
+        chart_file = discord.File(buf, filename="profile_donut.png")
+        embed.set_image(url="attachment://profile_donut.png")
+        
+        await interaction.followup.send(embed=embed, file=chart_file)
+        logger.info("Profile command used for %s.", name)
+
+
+    @bot.tree.command(
         name="register",
         description="Link your LeetCode profile to your Discord account.",
     )
@@ -661,30 +758,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
                 "❌ You are not currently registered.", ephemeral=True
             )
 
-    @bot.tree.command(
-        name="profile",
-        description="Check which LeetCode profile is linked to your account.",
-    )
-    async def profile_command(interaction: discord.Interaction) -> None:
-        assert bot.profile_manager is not None
 
-        author_id = str(interaction.user.id)
-        profile = bot.profile_manager.get_profile_by_discord_id(author_id)
-        
-        if profile:
-            name = profile["name"]
-            url = profile["leetcode_url"]
-            embed = discord.Embed(
-                title="👤 Your Profile",
-                description=f"**Name:** {name}\n**LeetCode:** [link]({url})",
-                color=config.EMBED_COLOR_DAILY,
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await interaction.response.send_message(
-                "❌ You do not have a registered profile.\nUse `/register` to link one.",
-                ephemeral=True
-            )
 
     @bot.tree.command(
         name="history",

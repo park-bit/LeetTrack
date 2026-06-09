@@ -227,6 +227,73 @@ def generate_week_chart(
 
 
 # ---------------------------------------------------------------------------
+# Profile Donut Chart
+# ---------------------------------------------------------------------------
+
+def generate_profile_donut_chart(
+    easy: int,
+    medium: int,
+    hard: int,
+    username: str,
+) -> io.BytesIO:
+    """
+    Generate a simple, sleek donut chart for a user's all-time problem breakdown.
+    """
+    total = easy + medium + hard
+    if total == 0:
+        return _empty_chart("No data to display.")
+
+    fig, ax = plt.subplots(figsize=(4.5, 4.5), facecolor=BG_COLOR)
+    ax.set_facecolor(BG_COLOR)
+
+    values = [easy, medium, hard]
+    labels = ["Easy", "Medium", "Hard"]
+    colors = [EASY_COLOR, MEDIUM_COLOR, HARD_COLOR]
+
+    # Filter out zero slices
+    non_zero = [
+        (v, l, c)
+        for v, l, c in zip(values, labels, colors)
+        if v > 0
+    ]
+    
+    vals_nz, labels_nz, colors_nz = zip(*non_zero)
+    
+    wedges, texts, autotexts = ax.pie(
+        vals_nz,
+        colors=list(colors_nz),
+        autopct="%1.0f%%",
+        startangle=90,
+        pctdistance=0.80,
+        wedgeprops={"linewidth": 2.5, "edgecolor": BG_COLOR, "width": 0.4}, # 'width' creates the donut
+    )
+    
+    for at in autotexts:
+        at.set_color(BG_COLOR)
+        at.set_fontsize(11)
+        at.set_fontweight("bold")
+        
+    ax.text(
+        0, 0, f"{total}\nSolved",
+        ha="center", va="center",
+        color=TEXT_COLOR, fontsize=14, fontweight="bold",
+    )
+
+    buf = io.BytesIO()
+    fig.savefig(
+        buf,
+        format="png",
+        facecolor=BG_COLOR,
+        dpi=150,
+        bbox_inches="tight",
+        pad_inches=0.1
+    )
+    buf.seek(0)
+    plt.close(fig)
+    return buf
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
