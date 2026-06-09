@@ -397,33 +397,34 @@ class DailyScheduler:
             logger.warning("No enabled profiles found — skipping evening nudge.")
             return
 
-        from api_client import fetch_recent_submissions
+        from leetcode_fetcher import LeetCodeFetcher
 
         slackers = []
 
-        for profile in profiles:
-            name = profile["name"]
-            discord_id = profile.get("discord_id")
-            
-            if not discord_id:
-                continue
-
-            try:
-                # Fetch their absolute latest submissions
-                subs = await fetch_recent_submissions(name, limit=15)
+        async with LeetCodeFetcher() as fetcher:
+            for profile in profiles:
+                name = profile["name"]
+                discord_id = profile.get("discord_id")
                 
-                # Count how many were solved "today" based on timezone
-                today_solves = 0
-                for sub in subs:
-                    sub_time = datetime.fromtimestamp(sub.timestamp, tz=pytz.timezone(config.TIMEZONE))
-                    if sub_time.date() == today:
-                        today_solves += 1
-
-                if today_solves == 0:
-                    slackers.append(f"<@{discord_id}>")
-
-            except Exception as e:
-                logger.error("Failed to fetch submissions for %s during nudge: %s", name, e)
+                if not discord_id:
+                    continue
+    
+                try:
+                    # Fetch their absolute latest submissions
+                    subs = await fetcher.get_accepted_submissions(name)
+                    
+                    # Count how many were solved "today" based on timezone
+                    today_solves = 0
+                    for sub in subs:
+                        sub_time = datetime.fromtimestamp(sub.timestamp, tz=pytz.timezone(config.TIMEZONE))
+                        if sub_time.date() == today:
+                            today_solves += 1
+    
+                    if today_solves == 0:
+                        slackers.append(f"<@{discord_id}>")
+    
+                except Exception as e:
+                    logger.error("Failed to fetch submissions for %s during nudge: %s", name, e)
 
         if slackers:
             logger.info("Found %d slackers. Sending nudge ping.", len(slackers))
