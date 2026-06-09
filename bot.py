@@ -481,7 +481,9 @@ def _register_commands(bot: LeetCodeBot) -> None:
         
         try:
             await bot.scheduler.run_evening_nudge()
-            await interaction.followup.send("✅ Evening nudge check executed! Anyone who hasn't solved a problem today was pinged.")
+            msg = await interaction.followup.send("✅ Evening nudge check executed! Anyone who hasn't solved a problem today was pinged.")
+            import asyncio
+            asyncio.create_task(msg.delete(delay=60.0))
         except Exception as e:
             logger.error("Error during manual nudge: %s", e)
             await interaction.followup.send(f"❌ Error during manual nudge: `{e}`")

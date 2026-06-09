@@ -285,7 +285,7 @@ class DiscordManager:
         )
         
         try:
-            await channel.send(content=mention_str, embed=embed)
+            await channel.send(content=mention_str, embed=embed, delete_after=60.0)
             logger.info("Sent 10 PM nudge ping to %d users.", len(mentions))
         except discord.HTTPException as exc:
             logger.error("Could not send nudge ping: %s", exc)
