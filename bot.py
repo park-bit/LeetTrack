@@ -22,9 +22,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import logging.handlers
+import os
 import signal
 import sys
-from datetime import datetime
+import threading
+from datetime import date, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import Any
 
 import discord
@@ -656,14 +660,34 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Render Keep-Alive Server
+# ---------------------------------------------------------------------------
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def keep_alive():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    logger.info("Starting Render health check server on port %d...", port)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    """Set up logging, create the bot, and run it."""
+    """Set up logging, start health check server, create the bot, and run it."""
     _setup_logging()
     logger.info("Starting LeetCode Discord Bot...")
+
+    # Start dummy HTTP server for Render health checks
+    keep_alive()
 
     bot = LeetCodeBot()
 
