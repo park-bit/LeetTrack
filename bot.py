@@ -259,6 +259,28 @@ def _register_commands(bot: LeetCodeBot) -> None:
     """Register all slash commands on the bot's command tree."""
 
     @bot.tree.command(
+        name="help",
+        description="Show all available bot commands and their syntax.",
+    )
+    async def help_command(interaction: discord.Interaction) -> None:
+        embed = discord.Embed(
+            title="🛠️ Bot Commands & Syntax",
+            description="Here are all the commands you can use to interact with me:",
+            color=config.EMBED_COLOR_DAILY,
+        )
+        embed.add_field(name="`/help`", value="Show this help menu.", inline=False)
+        embed.add_field(name="`/status`", value="Show bot status and scheduling info.", inline=False)
+        embed.add_field(name="`/run`", value="Manually trigger the daily report. (Takes ~1 min)", inline=False)
+        embed.add_field(name="`/leaderboard`", value="Show current weekly and monthly leaderboards.", inline=False)
+        embed.add_field(name="`/weeksummary`", value="Generate a chart showing activity over the last 7 days.", inline=False)
+        embed.add_field(name="`/register <name> <url>`", value="Register your LeetCode profile.\n*Example:* `/register name:Park url:https://leetcode.com/u/park-bit/`", inline=False)
+        embed.add_field(name="`/unregister`", value="Remove your LeetCode profile from the bot.", inline=False)
+        embed.add_field(name="`/profile`", value="Check which LeetCode profile is linked to your Discord account.", inline=False)
+        embed.add_field(name="`@DSA-chan`", value="Ping me anywhere to instantly see your stats for today.", inline=False)
+        
+        await interaction.response.send_message(embed=embed)
+
+    @bot.tree.command(
         name="status",
         description="Show bot status, last run time, and next scheduled run.",
     )
