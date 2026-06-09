@@ -43,6 +43,7 @@ from streak_manager import StreakManager
 from leaderboard_manager import LeaderboardManager
 from discord_manager import DiscordManager
 from scheduler import DailyScheduler
+from duel_manager import DuelManager
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -103,6 +104,7 @@ class LeetCodeBot(discord.Client):
         self.leaderboard_manager: LeaderboardManager | None = None
         self.discord_manager: DiscordManager | None = None
         self.scheduler: DailyScheduler | None = None
+        self.duel_manager: DuelManager | None = None
 
     async def setup_hook(self) -> None:
         """Called by discord.py before connecting — initialise everything."""
@@ -119,6 +121,7 @@ class LeetCodeBot(discord.Client):
         self.streak_manager = StreakManager(self.state)
         self.leaderboard_manager = LeaderboardManager(self.state)
         self.discord_manager = DiscordManager(self, self.state)
+        self.duel_manager = DuelManager(self)
 
         self.scheduler = DailyScheduler(
             state=self.state,
@@ -848,6 +851,140 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
         await interaction.response.send_message(embed=embed)
         logger.info("History command used by %s for date %s.", interaction.user, date_str)
+
+
+    @bot.tree.command(
+        name="duel",
+        description="Challenge another registered user to a LeetCode duel!",
+    )
+    @app_commands.describe(opponent="The user you want to duel")
+    async def duel_command(interaction: discord.Interaction, opponent: discord.Member) -> None:
+        assert bot.profile_manager is not None
+        assert bot.roadmap_manager is not None
+        assert bot.duel_manager is not None
+
+        await interaction.response.defer()
+
+        if opponent.id == interaction.user.id:
+            await interaction.followup.send("❌ You can't duel yourself!")
+            return
+
+        profiles = bot.profile_manager.get_enabled_profiles()
+        
+        challenger = next((p for p in profiles if p.get("discord_id") == str(interaction.user.id)), None)
+        challenged = next((p for p in profiles if p.get("discord_id") == str(opponent.id)), None)
+
+        if not challenger:
+            await interaction.followup.send("❌ You aren't linked to a LeetCode profile. Use `/register` first.")
+            return
+        if not challenged:
+            await interaction.followup.send(f"❌ {opponent.mention} isn't linked to a LeetCode profile.")
+            return
+
+        # Check if either user is already in a duel
+        if bot.duel_manager.get_active_duel(str(interaction.user.id)):
+            await interaction.followup.send("❌ You are already in an active duel!")
+            return
+        if bot.duel_manager.get_active_duel(str(opponent.id)):
+            await interaction.followup.send(f"❌ {opponent.mention} is already in an active duel!")
+            return
+
+        # Collect recently solved problems for both users
+        def get_solved_slugs(username: str) -> set[str]:
+            slugs = set()
+            history = bot.state.get_history(username)
+            for day_probs in history.values():
+                for p in day_probs:
+                    slugs.add(p["slug"])
+            return slugs
+
+        c1_slugs = get_solved_slugs(challenger["name"])
+        c2_slugs = get_solved_slugs(challenged["name"])
+        combined_solved = c1_slugs.union(c2_slugs)
+
+        # Pick a random problem from the roadmap that neither has solved
+        import random
+        pool = []
+        for slug, number in bot.roadmap_manager._by_slug.items():
+            if slug not in combined_solved:
+                title = bot.roadmap_manager._number_to_title[number]
+                pool.append((slug, title))
+
+        if not pool:
+            await interaction.followup.send("❌ Wow! Between the two of you, you've solved every problem in the roadmap! No fair duel possible.")
+            return
+
+        slug, title = random.choice(pool)
+        import config
+        url = f"{config.LEETCODE_BASE_URL}/problems/{slug}/"
+
+        bot.duel_manager.start_duel(str(interaction.user.id), str(opponent.id), slug, title, url)
+
+        embed = discord.Embed(
+            title="⚔️ LEETCODE DUEL! ⚔️",
+            description=f"{interaction.user.mention} has challenged {opponent.mention}!\n\n"
+                        f"**Problem:** [{title}]({url})\n\n"
+                        f"First to solve it and type `/claim_win` is the victor!",
+            color=0xFF0000
+        )
+        await interaction.followup.send(content=f"{interaction.user.mention} 🆚 {opponent.mention}", embed=embed)
+        logger.info("Duel started between %s and %s.", interaction.user, opponent)
+
+
+    @bot.tree.command(
+        name="claim_win",
+        description="Claim victory if you've solved the problem for your active duel!",
+    )
+    async def claim_win_command(interaction: discord.Interaction) -> None:
+        assert bot.duel_manager is not None
+        assert bot.profile_manager is not None
+
+        await interaction.response.defer()
+        
+        user_id = str(interaction.user.id)
+        duel = bot.duel_manager.get_active_duel(user_id)
+        if not duel:
+            await interaction.followup.send("❌ You are not in an active duel.")
+            return
+
+        profiles = bot.profile_manager.get_enabled_profiles()
+        profile = next((p for p in profiles if p.get("discord_id") == user_id), None)
+        if not profile:
+            await interaction.followup.send("❌ You aren't linked to a LeetCode profile.")
+            return
+            
+        username = profile["name"]
+        slug = duel["problem_slug"]
+        start_time = duel["start_time"]
+        
+        from leetcode_fetcher import LeetCodeFetcher
+        async with LeetCodeFetcher() as fetcher:
+            subs = await fetcher.get_accepted_submissions(username)
+            
+        # Check if they solved the problem AFTER the duel started
+        won = False
+        import datetime
+        for sub in subs:
+            if sub.slug == slug:
+                # sub.timestamp is unix seconds. start_time is datetime.utcnow()
+                sub_dt = datetime.datetime.utcfromtimestamp(sub.timestamp)
+                if sub_dt >= start_time:
+                    won = True
+                    break
+
+        if won:
+            opponent_id = duel["user1"] if duel["user2"] == user_id else duel["user2"]
+            bot.duel_manager.close_duel(user_id)
+            
+            embed = discord.Embed(
+                title="🏆 DUEL FINISHED! 🏆",
+                description=f"{interaction.user.mention} successfully solved **{duel['problem_title']}** and defeated <@{opponent_id}>!\n\nGG WP!",
+                color=0xFFD700
+            )
+            await interaction.followup.send(embed=embed)
+            logger.info("Duel won by %s.", interaction.user)
+        else:
+            await interaction.followup.send(f"❌ I checked your recent submissions, but I don't see an accepted solution for **{duel['problem_title']}** since the duel started. Keep trying!")
 
 
 # ---------------------------------------------------------------------------
