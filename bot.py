@@ -376,47 +376,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
                 f"❌ Error during manual run: {exc}", ephemeral=True
             )
 
-    @bot.tree.command(
-        name="fetchdate",
-        description="Fetch problems solved by everyone on a specific date (YYYY-MM-DD).",
-    )
-    async def fetchdate_command(
-        interaction: discord.Interaction,
-        target_date: str,
-    ) -> None:
-        assert bot.state is not None
-        
-        try:
-            from datetime import datetime
-            d = datetime.strptime(target_date, "%Y-%m-%d").date()
-        except ValueError:
-            await interaction.response.send_message("Invalid date format. Please use YYYY-MM-DD (e.g. 2026-06-09).", ephemeral=True)
-            return
 
-        profiles = bot.profile_manager.get_enabled_profiles() if bot.profile_manager else []
-        embed = discord.Embed(
-            title=f"📅 Submissions on {d.strftime('%B %d, %Y')}",
-            color=config.EMBED_COLOR_DAILY,
-        )
-        
-        found_any = False
-        for p in profiles:
-            name = p["name"]
-            probs = bot.state.get_day_problems(name, d.isoformat())
-            if probs:
-                found_any = True
-                lines = []
-                for idx, prob in enumerate(probs, start=1):
-                    title = prob.get("title", prob.get("slug", ""))
-                    diff  = prob.get("difficulty", "")
-                    url   = prob.get("url", "")
-                    lines.append(f"`{idx}.` {title} ({diff}) [link]({url})")
-                embed.add_field(name=name, value="\n".join(lines), inline=False)
-                
-        if not found_any:
-            embed.description = "No one solved any problems on this day."
-            
-        await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(
         name="leaderboard",
@@ -714,20 +674,19 @@ def _register_commands(bot: LeetCodeBot) -> None:
                 problems = bot.state.get_day_problems(name, date_str)
                 if problems:
                     found_any = True
-                    # Just count by difficulty
-                    easy = sum(1 for p in problems if p.get("difficulty") == "Easy")
-                    med  = sum(1 for p in problems if p.get("difficulty") == "Medium")
-                    hard = sum(1 for p in problems if p.get("difficulty") == "Hard")
+                    lines = []
+                    for idx, prob in enumerate(problems, start=1):
+                        title = prob.get("title", prob.get("slug", ""))
+                        diff  = prob.get("difficulty", "")
+                        url   = prob.get("url", "")
+                        tags  = prob.get("tags", [])
+                        tag_str  = "".join(f"[{t}]" for t in tags)
+                        tag_part = f" `{tag_str}`" if tag_str else ""
+                        lines.append(f"`{idx}.` {title} ({diff}){tag_part} [link]({url})")
                     
-                    diff_parts = []
-                    if easy: diff_parts.append(f"Easy: {easy}")
-                    if med:  diff_parts.append(f"Med: {med}")
-                    if hard: diff_parts.append(f"Hard: {hard}")
-                    diff_str = " · ".join(diff_parts) if diff_parts else "—"
-
                     embed.add_field(
-                        name=name,
-                        value=f"**{len(problems)} solved** — {diff_str}",
+                        name=f"{name} ({len(problems)} solved)",
+                        value="\n".join(lines),
                         inline=False,
                     )
             
