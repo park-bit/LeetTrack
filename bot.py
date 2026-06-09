@@ -468,6 +468,22 @@ def _register_commands(bot: LeetCodeBot) -> None:
         logger.info("Leaderboard command used by %s.", interaction.user)
 
     @bot.tree.command(
+        name="nudge",
+        description="Manually trigger the 10 PM Evening Nudge to test it.",
+    )
+    async def nudge_command(interaction: discord.Interaction) -> None:
+        assert bot.scheduler is not None
+        
+        await interaction.response.defer()
+        
+        try:
+            await bot.scheduler.run_evening_nudge()
+            await interaction.followup.send("✅ Evening nudge check executed! Anyone who hasn't solved a problem today was pinged.")
+        except Exception as e:
+            logger.error("Error during manual nudge: %s", e)
+            await interaction.followup.send(f"❌ Error during manual nudge: `{e}`")
+
+    @bot.tree.command(
         name="weeksummary",
         description="Show this week's LeetCode summary with a difficulty breakdown chart.",
     )

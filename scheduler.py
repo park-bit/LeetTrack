@@ -98,6 +98,19 @@ class DailyScheduler:
             max_instances=1,
         )
 
+        # Evening Nudge Ping at 22:00
+        self._scheduler.add_job(
+            self.run_evening_nudge,
+            CronTrigger(
+                hour=22,
+                minute=0,
+                timezone=tz_str,
+            ),
+            id="evening_nudge",
+            name="Evening 10 PM Nudge Ping",
+            max_instances=1,
+        )
+
         self._scheduler.start()
         logger.info(
             "Scheduler started. Daily job at %02d:%02d %s.",
@@ -364,6 +377,59 @@ class DailyScheduler:
         self._lb_manager.reset_monthly_leaderboard()
         self._state.save()
         logger.info("Monthly leaderboard reset completed.")
+
+    # ------------------------------------------------------------------
+    # Evening Nudge Pings (10:00 PM)
+    # ------------------------------------------------------------------
+
+    async def run_evening_nudge(self) -> None:
+        """
+        Check all enabled profiles at 10:00 PM.
+        If they have exactly 0 accepted submissions today, add them to a list and ping them.
+        """
+        now = datetime.now(tz=pytz.timezone(config.TIMEZONE))
+        today = now.date()
+        logger.info("=== Evening Nudge Ping started: %s ===", today.isoformat())
+
+        self._profile_manager.load()
+        profiles = self._profile_manager.get_enabled_profiles()
+        if not profiles:
+            logger.warning("No enabled profiles found — skipping evening nudge.")
+            return
+
+        from api_client import fetch_recent_submissions
+
+        slackers = []
+
+        for profile in profiles:
+            name = profile["name"]
+            discord_id = profile.get("discord_id")
+            
+            if not discord_id:
+                continue
+
+            try:
+                # Fetch their absolute latest submissions
+                subs = await fetch_recent_submissions(name, limit=15)
+                
+                # Count how many were solved "today" based on timezone
+                today_solves = 0
+                for sub in subs:
+                    sub_time = datetime.fromtimestamp(sub.timestamp, tz=pytz.timezone(config.TIMEZONE))
+                    if sub_time.date() == today:
+                        today_solves += 1
+
+                if today_solves == 0:
+                    slackers.append(f"<@{discord_id}>")
+
+            except Exception as e:
+                logger.error("Failed to fetch submissions for %s during nudge: %s", name, e)
+
+        if slackers:
+            logger.info("Found %d slackers. Sending nudge ping.", len(slackers))
+            await self._discord_manager.send_nudge_ping(slackers)
+        else:
+            logger.info("No slackers found! Everyone is on fire today 🔥")
 
     # ------------------------------------------------------------------
     # Manual trigger (for testing / on-demand runs)

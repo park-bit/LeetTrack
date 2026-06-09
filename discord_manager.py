@@ -268,6 +268,28 @@ class DiscordManager:
         except discord.HTTPException as exc:
             logger.error("Could not send error notification: %s", exc)
 
+    async def send_nudge_ping(self, mentions: list[str]) -> None:
+        """
+        Send a reminder ping to users who haven't solved a problem today.
+        """
+        if not mentions:
+            return
+            
+        channel = await self.get_channel()
+        mention_str = " ".join(mentions)
+        
+        embed = discord.Embed(
+            title="⏰ 10 PM Nudge! Keep your streaks alive!",
+            description="You haven't solved any LeetCode problems today! Midnight is approaching... time to lock in a quick Easy problem to keep your streak burning! 🔥",
+            color=discord.Color.orange()
+        )
+        
+        try:
+            await channel.send(content=mention_str, embed=embed)
+            logger.info("Sent 10 PM nudge ping to %d users.", len(mentions))
+        except discord.HTTPException as exc:
+            logger.error("Could not send nudge ping: %s", exc)
+
     # ------------------------------------------------------------------
     # Archive channel  (permanent file uploads)
     # ------------------------------------------------------------------
