@@ -300,6 +300,7 @@ class DailyScheduler:
                         "lang": sub.lang,
                         "timestamp": sub.timestamp,
                         "tags": sub.tags,
+                        "is_resubmission": sub.slug in known_slugs,
                     },
                 )
 
@@ -314,6 +315,7 @@ class DailyScheduler:
                     "difficulty": s.difficulty,
                     "url": s.url,
                     "tags": s.tags,
+                    "is_resubmission": s.slug in known_slugs,
                 }
                 for s in today_subs
             ]

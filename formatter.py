@@ -99,12 +99,14 @@ def build_daily_embed(
             difficulty = prob.get("difficulty", "Unknown")
             url = prob.get("url", f"https://leetcode.com/problems/{slug}/")
             raw_tags: list[str] = prob.get("tags", [])
+            is_resubmission = prob.get("is_resubmission", False)
 
             tag_str = "".join(f"[{t}]" for t in raw_tags) if raw_tags else ""
             tag_part = f" `{tag_str}`" if tag_str else ""
+            resub_part = " *(resubmission)*" if is_resubmission else ""
 
             problem_lines.append(
-                f"`{idx}.` {title} ({difficulty}){tag_part} [link]({url})"
+                f"`{idx}.` {title} ({difficulty}){tag_part}{resub_part} [link]({url})"
             )
 
         field_value = field_header
@@ -218,9 +220,11 @@ def build_weekly_aggregate_embeds(
                 diff = prob.get("difficulty", "Unknown")
                 url = prob.get("url", f"https://leetcode.com/problems/{slug}/")
                 tags = prob.get("tags", [])
+                is_resubmission = prob.get("is_resubmission", False)
                 tag_str = "".join(f"[{t}]" for t in tags)
                 tag_part = f" `{tag_str}`" if tag_str else ""
-                lines.append(f"`{idx}.` {title} ({diff}){tag_part} [link]({url})")
+                resub_part = " *(resubmission)*" if is_resubmission else ""
+                lines.append(f"`{idx}.` {title} ({diff}){tag_part}{resub_part} [link]({url})")
 
             # Discord field value limit is 1024. Split into chunks to prevent truncation.
             chunks = []
