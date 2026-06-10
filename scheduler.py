@@ -287,8 +287,12 @@ class DailyScheduler:
             stats["last_updated"] = today.isoformat()
             self._state.set_user_stats(name, stats)
 
+            prev_today_history = self._state.get_day_problems(name, today.isoformat())
+            prev_resub_status = {sub["slug"]: sub.get("is_resubmission", False) for sub in prev_today_history}
+
             # Persist history
             for sub in today_subs:
+                is_resub = prev_resub_status[sub.slug] if sub.slug in prev_resub_status else sub.slug in known_slugs
                 self._state.add_history_entry(
                     name,
                     today.isoformat(),
@@ -300,7 +304,7 @@ class DailyScheduler:
                         "lang": sub.lang,
                         "timestamp": sub.timestamp,
                         "tags": sub.tags,
-                        "is_resubmission": sub.slug in known_slugs,
+                        "is_resubmission": is_resub,
                     },
                 )
 
@@ -315,7 +319,7 @@ class DailyScheduler:
                     "difficulty": s.difficulty,
                     "url": s.url,
                     "tags": s.tags,
-                    "is_resubmission": s.slug in known_slugs,
+                    "is_resubmission": prev_resub_status[s.slug] if s.slug in prev_resub_status else s.slug in known_slugs,
                 }
                 for s in today_subs
             ]
