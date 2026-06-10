@@ -67,7 +67,7 @@ MONGODB_URI: str | None = os.environ.get("MONGODB_URI")
 # ---------------------------------------------------------------------------
 
 PROFILES_FILE: Path = BASE_DIR / "profiles.json"
-ROADMAP_FILE: Path = BASE_DIR / "roadmap.json"
+ROADMAPS_DIR: Path = BASE_DIR / "roadmaps"
 STATE_FILE: Path = BASE_DIR / "state.json"
 
 DATA_DIR: Path = BASE_DIR / "data"

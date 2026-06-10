@@ -357,7 +357,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
         )
 
         embed.add_field(
-            name="Roadmap Problems",
+            name="Roadmaps Loaded",
             value=str(bot.roadmap_manager.total) if bot.roadmap_manager else "0",
             inline=True,
         )
@@ -512,14 +512,24 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
     @bot.tree.command(
         name="roadmap",
-        description="Check NeetCode 150 progress for yourself or another user.",
+        description="Check roadmap progress for yourself or another user.",
     )
+    @app_commands.describe(
+        sheet="The problem sheet to check progress against",
+        target_user="Optional: User to check progress for"
+    )
+    @app_commands.choices(sheet=[
+        app_commands.Choice(name="NeetCode 150", value="neetcode150"),
+        app_commands.Choice(name="Striver A2Z", value="striver_a2z")
+    ])
     async def roadmap_command(
         interaction: discord.Interaction,
+        sheet: app_commands.Choice[str],
         target_user: discord.Member | None = None,
     ) -> None:
         assert bot.state is not None
         assert bot.profile_manager is not None
+        assert bot.roadmap_manager is not None
         
         await interaction.response.defer()
         
@@ -541,16 +551,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
         stats = bot.state.get_user_stats(name)
         known_accepted = stats.get("known_accepted", [])
         
-        import json
-        try:
-            with open("roadmap.json", "r", encoding="utf-8") as f:
-                roadmap = json.load(f)
-        except Exception:
-            await interaction.followup.send("❌ Could not load roadmap.json.")
+        roadmap_dict = bot.roadmap_manager.get_roadmap(sheet.value)
+        if not roadmap_dict:
+            await interaction.followup.send(f"❌ Could not load roadmap '{sheet.value}'.")
             return
             
-        solved_roadmap = set(known_accepted) & set(roadmap.keys())
-        total_roadmap = len(roadmap)
+        solved_roadmap = set(known_accepted) & set(roadmap_dict.keys())
+        total_roadmap = len(roadmap_dict)
         solved_count = len(solved_roadmap)
         percentage = (solved_count / total_roadmap) * 100 if total_roadmap > 0 else 0
         
@@ -560,7 +567,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
         bar = "█" * filled_length + "░" * (bar_length - filled_length)
         
         embed = discord.Embed(
-            title=f"🗺️ NeetCode 150 Progress: {name}",
+            title=f"🗺️ {sheet.name} Progress: {name}",
             description=f"**[{bar}] {percentage:.1f}%**\n\n**{solved_count} / {total_roadmap}** problems solved.",
             color=discord.Color.purple()
         )

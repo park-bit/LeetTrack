@@ -138,19 +138,20 @@ Edit `profiles.json`:
 
 ## 🗺️ Roadmap Setup
 
-Edit `roadmap.json`:
+Add JSON files to the `roadmaps/` directory:
 
 ```json
 {
-  "Two Sum": 1,
-  "Best Time to Buy and Sell Stock": 2,
-  "Contains Duplicate": 3
+  "two-sum": 1,
+  "best-time-to-buy-and-sell-stock": 2,
+  "contains-duplicate": 3
 }
 ```
 
-- Keys are **exact LeetCode problem titles** (case-insensitive matching)
-- Values are the roadmap position numbers
-- The bot auto-matches solved problems against this list using both title and slug
+- You can create multiple files (e.g., `neetcode150.json`, `striver_a2z.json`).
+- Keys are **exact LeetCode problem titles or slugs** (case-insensitive matching).
+- Values are the roadmap position numbers.
+- The bot auto-matches solved problems against this list using both title and slug.
 
 The 58-problem starter roadmap included covers:
 - Arrays & Hashing
@@ -253,7 +254,7 @@ leetcode-discord-bot/
 ├── state_manager.py       # All persistence (atomic JSON writes)
 │
 ├── profiles.json          # ← Edit this: your LeetCode users
-├── roadmap.json           # ← Edit this: your problem roadmap
+├── roadmaps/              # ← Add JSON files here for your problem roadmaps
 ├── state.json             # Auto-managed: bot runtime state
 │
 ├── data/
@@ -312,8 +313,8 @@ A: Use `/run` to trigger the job manually when you come back online.
 **Q: Can I add more than 3 users?**  
 A: Yes — there's no limit. Just add more entries to `profiles.json`.
 
-**Q: Can I change the roadmap?**  
-A: Yes — edit `roadmap.json` freely. Problem matching uses both exact title and slug.
+**Q: Can I change the roadmaps?**  
+A: Yes — add or edit JSON files inside the `roadmaps/` folder. Problem matching uses both exact title and slug.
 
 **Q: Can I change the daily run time?**  
 A: Yes — set `DAILY_RUN_HOUR` and `DAILY_RUN_MINUTE` in `.env`.
