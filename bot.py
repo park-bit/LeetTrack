@@ -775,6 +775,29 @@ def _register_commands(bot: LeetCodeBot) -> None:
             value=f"**{stats.total_solved}** problems",
             inline=False
         )
+        
+        # Add roadmap progress
+        if bot.roadmap_manager and bot.state:
+            user_stats = bot.state.get_user_stats(name)
+            known_accepted = user_stats.get("known_accepted", [])
+            for sheet_name in bot.roadmap_manager.get_all_roadmaps():
+                roadmap_dict = bot.roadmap_manager.get_roadmap(sheet_name)
+                if not roadmap_dict: continue
+                
+                solved_roadmap = set(known_accepted) & set(roadmap_dict.keys())
+                total_roadmap = len(roadmap_dict)
+                solved_count = len(solved_roadmap)
+                percentage = (solved_count / total_roadmap) * 100 if total_roadmap > 0 else 0
+                
+                bar_length = 15
+                filled_length = int(bar_length * solved_count // total_roadmap) if total_roadmap > 0 else 0
+                bar = "█" * filled_length + "░" * (bar_length - filled_length)
+                
+                embed.add_field(
+                    name=f"🗺️ {sheet_name} Progress",
+                    value=f"`[{bar}]` **{percentage:.1f}%** ({solved_count}/{total_roadmap})",
+                    inline=False
+                )
 
         import asyncio
         import functools
