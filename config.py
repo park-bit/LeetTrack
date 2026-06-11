@@ -31,6 +31,10 @@ DISCORD_CHANNEL_ID: int = int(os.environ.get("DISCORD_CHANNEL_ID", "0"))
 # Set to 0 or leave blank to disable archiving.
 DISCORD_ARCHIVE_CHANNEL_ID: int = int(os.environ.get("DISCORD_ARCHIVE_CHANNEL_ID", "0"))
 
+# Optional: HTTP/HTTPS proxy URL to bypass Discord Cloudflare/shared IP rate limits
+DISCORD_PROXY: str | None = os.environ.get("DISCORD_PROXY") or None
+
+
 if not DISCORD_TOKEN:
     raise EnvironmentError(
         "DISCORD_TOKEN is not set. "
