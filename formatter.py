@@ -353,7 +353,8 @@ def build_weekly_summary_embed(
 
 
 class ReportDropdown(discord.ui.Select):
-    def __init__(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
+    def __init__(self, bot, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
+        self.bot = bot
         self.summary_embed = summary_embed
         self.detailed_embeds = detailed_embeds
         
@@ -382,14 +383,34 @@ class ReportDropdown(discord.ui.Select):
         super().__init__(placeholder="Select a day to view details...", min_values=1, max_values=1, options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
-        # Ephemeral response to keep the main channel clean
+        # Defer response immediately since fetching LeetCode can take time
+        await interaction.response.defer(ephemeral=True)
+
         if self.values[0] == "summary":
-            await interaction.response.send_message(embed=self.summary_embed, ephemeral=True)
-        else:
-            idx = int(self.values[0])
-            await interaction.response.send_message(embed=self.detailed_embeds[idx], ephemeral=True)
+            await interaction.followup.send(embed=self.summary_embed, ephemeral=True)
+            return
+
+        import time
+        now = time.time()
+        
+        # Enforce a 60-second cooldown on LeetCode API fetches
+        if not hasattr(self.bot, "_last_dropdown_sync"):
+            self.bot._last_dropdown_sync = 0
+            
+        if now - self.bot._last_dropdown_sync > 60:
+            self.bot._last_dropdown_sync = now
+            # Run background sync which fetches data and updates the main message natively
+            try:
+                new_summary, new_detailed = await self.bot.scheduler.run_daily_job(force_new_message=False)
+                self.summary_embed = new_summary
+                self.detailed_embeds = new_detailed
+            except Exception as e:
+                logger.error("Error during dropdown sync: %s", e)
+        
+        idx = int(self.values[0])
+        await interaction.followup.send(embed=self.detailed_embeds[idx], ephemeral=True)
 
 class ReportView(discord.ui.View):
-    def __init__(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
+    def __init__(self, bot, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
         super().__init__(timeout=None)
-        self.add_item(ReportDropdown(summary_embed, detailed_embeds))
+        self.add_item(ReportDropdown(bot, summary_embed, detailed_embeds))

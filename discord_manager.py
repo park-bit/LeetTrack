@@ -135,7 +135,7 @@ class DiscordManager:
         Send a new message with the summary embed and interactive dropdown view.
         """
         from formatter import ReportView
-        view = ReportView(summary_embed, detailed_embeds)
+        view = ReportView(self._client, summary_embed, detailed_embeds)
         channel = await self.get_channel()
 
         for attempt in range(config.DISCORD_MAX_RETRIES):
@@ -179,7 +179,7 @@ class DiscordManager:
         Edit an existing Discord message with the updated summary embed and view.
         """
         from formatter import ReportView
-        view = ReportView(summary_embed, detailed_embeds)
+        view = ReportView(self._client, summary_embed, detailed_embeds)
 
         for attempt in range(config.DISCORD_MAX_RETRIES):
             try:

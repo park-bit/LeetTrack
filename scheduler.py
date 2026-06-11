@@ -21,6 +21,7 @@ from typing import Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
+import discord
 
 import config
 from leetcode_fetcher import LeetCodeFetcher, Submission
@@ -141,7 +142,7 @@ class DailyScheduler:
     # Daily job
     # ------------------------------------------------------------------
 
-    async def run_daily_job(self, force_new_message: bool = False) -> None:
+    async def run_daily_job(self, force_new_message: bool = False) -> tuple[discord.Embed, list[discord.Embed]]:
         """
         Main daily job executed at midnight.
 
@@ -397,6 +398,8 @@ class DailyScheduler:
         self._state.save()
 
         logger.info("=== Daily job completed: %s ===", today.isoformat())
+        
+        return summary_embed, detailed_embeds
 
     # ------------------------------------------------------------------
     # Monthly reset
