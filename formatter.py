@@ -280,3 +280,116 @@ def build_weekly_aggregate_embeds(
         embeds[-1].set_footer(text="Updates daily at midnight. Run /run to sync.")
 
     return embeds
+
+# ---------------------------------------------------------------------------
+# Weekly Summary & Interactive View
+# ---------------------------------------------------------------------------
+
+def build_weekly_summary_embed(
+    profiles: list[dict[str, Any]],
+    daily_history: list[tuple[date, dict[str, list[dict[str, Any]]]]],
+) -> discord.Embed:
+    """Builds a beautiful summary embed for the entire week."""
+    if not daily_history:
+        return discord.Embed(title="Weekly Report", description="No data for this week.", color=config.EMBED_COLOR_WEEKLY)
+        
+    start_date = daily_history[0][0]
+    end_date = daily_history[-1][0]
+    
+    date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
+    
+    embed = discord.Embed(
+        title="🏆 Weekly LeetCode Summary",
+        description=f"**{date_range}**\nUse the dropdown below to view detailed daily submissions!",
+        color=config.EMBED_COLOR_WEEKLY,
+    )
+    
+    user_colors = {
+        "park-bit": "🟠",
+        "lilght01": "🔵",
+        "Yuuta_1678": "🟢",
+        "vedant_ghate": "🔴"
+    }
+    default_color = "🟤"
+    
+    # Calculate totals
+    totals = {}
+    for p in profiles:
+        if p.get("enabled", True):
+            totals[p["name"]] = {"solved": 0, "easy": 0, "medium": 0, "hard": 0, "discord_id": p.get("discord_id")}
+            
+    for d, problems_by_user in daily_history:
+        for name, problems in problems_by_user.items():
+            if name in totals:
+                totals[name]["solved"] += len(problems)
+                totals[name]["easy"] += sum(1 for p in problems if p.get("difficulty") == "Easy")
+                totals[name]["medium"] += sum(1 for p in problems if p.get("difficulty") == "Medium")
+                totals[name]["hard"] += sum(1 for p in problems if p.get("difficulty") == "Hard")
+
+    # Sort by solved descending
+    sorted_users = sorted(totals.items(), key=lambda x: x[1]["solved"], reverse=True)
+    
+    for name, stats in sorted_users:
+        if stats["solved"] == 0:
+            continue
+            
+        color_emoji = user_colors.get(name, default_color)
+        mention = f"<@{stats['discord_id']}>" if stats["discord_id"] else name
+        
+        diff_parts = []
+        if stats["easy"]: diff_parts.append(f"Easy: {stats['easy']}")
+        if stats["medium"]: diff_parts.append(f"Med: {stats['medium']}")
+        if stats["hard"]: diff_parts.append(f"Hard: {stats['hard']}")
+        diff_str = " · ".join(diff_parts) if diff_parts else "—"
+        
+        embed.add_field(
+            name=f"{color_emoji} {name}",
+            value=f"👤 {mention}\n**{stats['solved']} solved** ({diff_str})",
+            inline=True
+        )
+        
+    embed.set_footer(text="Updates daily at midnight. Run /run to sync.")
+    return embed
+
+
+class ReportDropdown(discord.ui.Select):
+    def __init__(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
+        self.summary_embed = summary_embed
+        self.detailed_embeds = detailed_embeds
+        
+        options = [
+            discord.SelectOption(
+                label="Weekly Summary",
+                description="Overview of the week's totals",
+                emoji="🏆",
+                value="summary"
+            )
+        ]
+        
+        for i, embed in enumerate(detailed_embeds):
+            # Extract date from embed title "📅 Monday, 08 June 2026 (IST)"
+            title = embed.title.replace("📅 ", "").replace(" (IST)", "")
+            options.append(
+                discord.SelectOption(
+                    label=title[:100],
+                    description=f"Detailed submissions for {title.split(',')[0]}",
+                    emoji="📅",
+                    value=str(i)
+                )
+            )
+            
+        # Discord limits select options to 25.
+        super().__init__(placeholder="Select a day to view details...", min_values=1, max_values=1, options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction):
+        # Ephemeral response to keep the main channel clean
+        if self.values[0] == "summary":
+            await interaction.response.send_message(embed=self.summary_embed, ephemeral=True)
+        else:
+            idx = int(self.values[0])
+            await interaction.response.send_message(embed=self.detailed_embeds[idx], ephemeral=True)
+
+class ReportView(discord.ui.View):
+    def __init__(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
+        super().__init__(timeout=None)
+        self.add_item(ReportDropdown(summary_embed, detailed_embeds))

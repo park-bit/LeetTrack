@@ -130,19 +130,17 @@ class DiscordManager:
     # Send new message
     # ------------------------------------------------------------------
 
-    async def send_embeds(self, embeds: list[discord.Embed]) -> discord.Message | None:
+    async def send_report(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> discord.Message | None:
         """
-        Send a new message with the given embeds to the report channel.
-
-        Discord allows up to 10 embeds per message.  We send the first 10
-        (which is more than enough for our report structure).
+        Send a new message with the summary embed and interactive dropdown view.
         """
+        from formatter import ReportView
+        view = ReportView(summary_embed, detailed_embeds)
         channel = await self.get_channel()
-        embeds_to_send = embeds[:10]
 
         for attempt in range(config.DISCORD_MAX_RETRIES):
             try:
-                message = await channel.send(embeds=embeds_to_send)
+                message = await channel.send(embed=summary_embed, view=view)
                 self._state.set_message_id(message.id)
                 logger.info("Sent new report message (ID: %d).", message.id)
                 return message
@@ -174,19 +172,18 @@ class DiscordManager:
     # Edit existing message
     # ------------------------------------------------------------------
 
-    async def edit_embeds(
-        self, message: discord.Message, embeds: list[discord.Embed]
+    async def edit_report(
+        self, message: discord.Message, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]
     ) -> bool:
         """
-        Edit an existing Discord message with updated embeds.
-
-        Returns True on success, False on failure.
+        Edit an existing Discord message with the updated summary embed and view.
         """
-        embeds_to_send = embeds[:10]
+        from formatter import ReportView
+        view = ReportView(summary_embed, detailed_embeds)
 
         for attempt in range(config.DISCORD_MAX_RETRIES):
             try:
-                await message.edit(embeds=embeds_to_send)
+                await message.edit(embed=summary_embed, view=view)
                 logger.info("Updated report message (ID: %d).", message.id)
                 return True
             except discord.HTTPException as exc:
@@ -216,39 +213,31 @@ class DiscordManager:
     # Publish or update (main entry point)
     # ------------------------------------------------------------------
 
-    async def publish_or_update(self, embeds: list[discord.Embed]) -> None:
+    async def publish_or_update(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> None:
         """
         Publish a new report or update the existing one.
-
-        Workflow:
-          1. Try to recover the stored message.
-          2. If found → edit it.
-          3. If not found → send a new message and store the ID.
         """
         existing = await self.recover_message()
 
         if existing is not None:
-            success = await self.edit_embeds(existing, embeds)
+            success = await self.edit_report(existing, summary_embed, detailed_embeds)
             if not success:
                 logger.warning("Edit failed — attempting to send a new message.")
-                await self.send_embeds(embeds)
+                await self.send_report(summary_embed, detailed_embeds)
         else:
-            await self.send_embeds(embeds)
+            await self.send_report(summary_embed, detailed_embeds)
 
     # ------------------------------------------------------------------
     # New-week reset
     # ------------------------------------------------------------------
 
-    async def start_new_week(self, embeds: list[discord.Embed]) -> None:
+    async def start_new_week(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> None:
         """
-        Send a brand-new message for the new week, discarding the old message ID.
-
-        The old message remains in Discord for archival purposes but will
-        not be edited again.
+        Send a brand-new message for the new week.
         """
         logger.info("Starting new week — creating fresh report message.")
         self._state.set_message_id(None)
-        await self.send_embeds(embeds)
+        await self.send_report(summary_embed, detailed_embeds)
 
     # ------------------------------------------------------------------
     # Utility

@@ -367,8 +367,12 @@ class DailyScheduler:
         # Add today's problems to the end of the history stack
         daily_history.append((today, daily_problems))
 
-        # Build multiple embeds (one for each day)
-        embeds = formatter.build_weekly_aggregate_embeds(
+        # Build embeds
+        detailed_embeds = formatter.build_weekly_aggregate_embeds(
+            profiles=profiles,
+            daily_history=daily_history,
+        )
+        summary_embed = formatter.build_weekly_summary_embed(
             profiles=profiles,
             daily_history=daily_history,
         )
@@ -376,9 +380,9 @@ class DailyScheduler:
         # Publish to Discord
         if force_new_message or (is_monday and (self._state.get_week_start() == today)):
             # First Monday of new week OR forced by /roll — send a fresh message
-            await self._discord_manager.start_new_week(embeds)
+            await self._discord_manager.start_new_week(summary_embed, detailed_embeds)
         else:
-            await self._discord_manager.publish_or_update(embeds)
+            await self._discord_manager.publish_or_update(summary_embed, detailed_embeds)
 
         # Persist state
         self._state.set_last_run(now)
