@@ -94,7 +94,7 @@ class LeetCodeBot(discord.Client):
     def __init__(self) -> None:
         intents = discord.Intents.default()
         intents.message_content = False  # not needed — we only check message.mentions
-        super().__init__(intents=intents, proxy=config.DISCORD_PROXY)
+        super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
         # Managers (initialised in setup())
