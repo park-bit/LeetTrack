@@ -380,15 +380,6 @@ def _register_commands(bot: LeetCodeBot) -> None:
         try:
             await bot.scheduler.trigger_now()
             await interaction.edit_original_response(content="✅ Daily report generated!")
-            import asyncio
-            loop = asyncio.get_running_loop()
-            async def _cleanup():
-                await asyncio.sleep(30)
-                try:
-                    await interaction.delete_original_response()
-                except Exception:
-                    pass
-            loop.create_task(_cleanup())
         except Exception as exc:  # noqa: BLE001
             logger.error("Manual run failed: %s", exc, exc_info=True)
             await interaction.followup.send(
@@ -405,16 +396,6 @@ def _register_commands(bot: LeetCodeBot) -> None:
         try:
             await bot.scheduler.trigger_now(force_new_message=True)
             msg = await interaction.followup.send("✅ Successfully rolled out a new message for the week!")
-            
-            import asyncio
-            loop = asyncio.get_running_loop()
-            async def _cleanup_roll():
-                await asyncio.sleep(30)
-                try:
-                    await msg.delete()
-                except Exception:
-                    pass
-            loop.create_task(_cleanup_roll())
             
         except Exception as exc:
             logger.exception("Error during /roll")
@@ -476,7 +457,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
     @bot.tree.command(
         name="nudge",
-        description="Manually trigger the 10 PM Evening Nudge to test it.",
+        description="Manually trigger the 10 PM nudge to ping inactive users.",
     )
     async def nudge_command(interaction: discord.Interaction) -> None:
         assert bot.scheduler is not None
@@ -486,8 +467,6 @@ def _register_commands(bot: LeetCodeBot) -> None:
         try:
             await bot.scheduler.run_evening_nudge()
             msg = await interaction.followup.send("✅ Evening nudge check executed! Anyone who hasn't solved a problem today was pinged.")
-            import asyncio
-            asyncio.create_task(msg.delete(delay=60.0))
         except Exception as e:
             logger.error("Error during manual nudge: %s", e)
             await interaction.followup.send(f"❌ Error during manual nudge: `{e}`")
@@ -504,8 +483,6 @@ def _register_commands(bot: LeetCodeBot) -> None:
         try:
             await bot.scheduler.run_potd()
             msg = await interaction.followup.send("✅ Problem of the Day posted!")
-            import asyncio
-            asyncio.create_task(msg.delete(delay=60.0))
         except Exception as e:
             logger.error("Error during manual POTD: %s", e)
             await interaction.followup.send(f"❌ Error during manual POTD: `{e}`")
