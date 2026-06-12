@@ -87,9 +87,21 @@ class DailyScheduler:
                 timezone=tz_str,
             ),
             id="daily_job",
+            kwargs={"is_midnight_run": True},
             name="Daily LeetCode Report",
             max_instances=1,
             misfire_grace_time=300,  # 5 minutes
+        )
+
+        # Background sync every hour
+        self._scheduler.add_job(
+            self.run_daily_job,
+            CronTrigger(minute="0", timezone=tz_str),
+            id="hourly_sync",
+            kwargs={"is_midnight_run": False},
+            name="Hourly Background Sync",
+            max_instances=1,
+            misfire_grace_time=300,
         )
 
         # Monthly reset on the 1st at 00:01
@@ -142,7 +154,7 @@ class DailyScheduler:
     # Daily job
     # ------------------------------------------------------------------
 
-    async def run_daily_job(self, force_new_message: bool = False) -> tuple[discord.Embed, list[discord.Embed]]:
+    async def run_daily_job(self, force_new_message: bool = False, is_midnight_run: bool = False) -> tuple[discord.Embed, list[discord.Embed]]:
         """
         Main daily job executed at midnight.
 
@@ -197,7 +209,8 @@ class DailyScheduler:
         # Archive notification (new message will be sent below)
 
         # Reset daily stats
-        self._state.reset_all_daily_stats()
+        if is_midnight_run:
+            self._state.reset_all_daily_stats()
 
         # Fetch submissions
         async with LeetCodeFetcher() as fetcher:
@@ -264,11 +277,12 @@ class DailyScheduler:
                     hard = sum(1 for s in today_subs if s.difficulty == "Hard")
                     solved = len(today_subs)
 
-                # Update the baseline for tomorrow
-                stats["total_solved"] = lc_stats.total_solved
-                stats["easy"] = lc_stats.easy_solved
-                stats["medium"] = lc_stats.medium_solved
-                stats["hard"] = lc_stats.hard_solved
+                if is_midnight_run:
+                    # Update the baseline for tomorrow
+                    stats["total_solved"] = lc_stats.total_solved
+                    stats["easy"] = lc_stats.easy_solved
+                    stats["medium"] = lc_stats.medium_solved
+                    stats["hard"] = lc_stats.hard_solved
 
             # Fallback if the exact delta API lagged behind but we physically saw recent submissions
             if solved == 0 and len(today_subs) > 0:
