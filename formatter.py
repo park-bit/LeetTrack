@@ -274,10 +274,9 @@ def build_weekly_aggregate_embeds(
                     inline=False
                 )
 
+        embed.set_footer(text="Auto-syncs hourly. Select a day in dropdown to force live fetch.")
+        embed.timestamp = discord.utils.utcnow()
         embeds.append(embed)
-
-    if embeds:
-        embeds[-1].set_footer(text="Updates daily at midnight. Run /run to sync.")
 
     return embeds
 
@@ -348,7 +347,8 @@ def build_weekly_summary_embed(
             inline=True
         )
         
-    embed.set_footer(text="Updates daily at midnight. Run /run to sync.")
+    embed.set_footer(text="Auto-syncs hourly. Select a day below to force live fetch.")
+    embed.timestamp = discord.utils.utcnow()
     return embed
 
 
