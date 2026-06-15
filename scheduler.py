@@ -198,6 +198,30 @@ class DailyScheduler:
                 last_week_lb = self._lb_manager.build_weekly_leaderboard(profiles)
                 await self._role_manager.update_weekly_roles(last_week_lb)
                 
+            # --- START WEEKLY TEXT DUMP ---
+            if stored_week_start:
+                delta_days = (today - stored_week_start).days
+                if delta_days > 0:
+                    last_week_history = []
+                    for i in range(delta_days):
+                        d = stored_week_start + timedelta(days=i)
+                        d_iso = d.isoformat()
+                        day_dict = {}
+                        for p in profiles:
+                            name = p["name"]
+                            probs = self._state.get_day_problems(name, d_iso)
+                            if probs:
+                                day_dict[name] = probs
+                        last_week_history.append((d, day_dict))
+                    
+                    try:
+                        import formatter
+                        text_chunks = formatter.build_weekly_raw_text_summary(profiles, last_week_history)
+                        await self._discord_manager.send_weekly_text_summary(text_chunks)
+                    except Exception as e:
+                        logger.error("Failed to generate/send weekly raw text dump: %s", e)
+            # --- END WEEKLY TEXT DUMP ---
+                
             self._lb_manager.reset_weekly_leaderboard(profiles)
             self._state.set_week_start(today)
         elif stored_week_start is None:

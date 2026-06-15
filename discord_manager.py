@@ -127,6 +127,29 @@ class DiscordManager:
         return None
 
     # ------------------------------------------------------------------
+    # Text Dump Channel
+    # ------------------------------------------------------------------
+
+    async def send_weekly_text_summary(self, messages: list[str]) -> None:
+        """Sends the weekly text summary blocks to the designated text channel."""
+        if not hasattr(config, 'WEEKLY_TEXT_CHANNEL_ID'):
+            logger.warning("WEEKLY_TEXT_CHANNEL_ID not set. Skipping text summary.")
+            return
+            
+        try:
+            channel = await self._client.fetch_channel(config.WEEKLY_TEXT_CHANNEL_ID)
+            if not isinstance(channel, discord.TextChannel):
+                logger.error("Weekly text channel is not a text channel.")
+                return
+                
+            for msg in messages:
+                if msg.strip():
+                    await channel.send(msg)
+            logger.info("Sent weekly text summary (%d chunks) to channel %d", len(messages), config.WEEKLY_TEXT_CHANNEL_ID)
+        except Exception as e:
+            logger.error("Failed to send weekly text summary: %s", e)
+
+    # ------------------------------------------------------------------
     # Send new message
     # ------------------------------------------------------------------
 

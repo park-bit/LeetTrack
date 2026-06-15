@@ -414,3 +414,77 @@ class ReportView(discord.ui.View):
     def __init__(self, bot, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]):
         super().__init__(timeout=None)
         self.add_item(ReportDropdown(bot, summary_embed, detailed_embeds))
+
+def build_weekly_raw_text_summary(
+    profiles: list[dict[str, Any]],
+    daily_history: list[tuple[date, dict[str, list[dict[str, Any]]]]]
+) -> list[str]:
+    """Builds a plain-text summary of all questions solved, grouped by user and date."""
+    if not daily_history:
+        return ["No data for this week."]
+
+    start_date = daily_history[0][0]
+    end_date = daily_history[-1][0]
+    date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
+    
+    messages = []
+    current_chunk = f"### 🗓️ Full Weekly Problem Dump ({date_range})\n\n"
+    
+    for p in profiles:
+        if not p.get("enabled", True):
+            continue
+        name = p["name"]
+        
+        user_lines = []
+        user_total = 0
+        
+        for d, problems_by_user in daily_history:
+            problems = problems_by_user.get(name, [])
+            if not problems:
+                continue
+                
+            user_total += len(problems)
+            date_str = d.strftime('%A, %d %b')
+            user_lines.append(f"**{date_str}:**")
+            
+            for sub in problems:
+                title = sub.get("title", sub.get("slug", "Unknown"))
+                slug = sub.get("slug", "")
+                diff = sub.get("difficulty", "Unknown")
+                url = f"https://leetcode.com/problems/{slug}/" if slug else ""
+                resub_str = " *(resubmission)*" if sub.get("is_resubmission") else ""
+                
+                # Wrapping URL in <> prevents discord embeds for that link
+                if url:
+                    user_lines.append(f"- [{title}](<{url}>) ({diff}){resub_str}")
+                else:
+                    user_lines.append(f"- {title} ({diff}){resub_str}")
+            user_lines.append("") 
+            
+        if user_total == 0:
+            continue
+            
+        # Add user header to lines
+        user_lines.insert(0, f"## 👤 {name} ({user_total} solved)")
+        
+        for line in user_lines:
+            if len(current_chunk) + len(line) + 1 > 1900:
+                messages.append(current_chunk)
+                current_chunk = line + "\n"
+            else:
+                current_chunk += line + "\n"
+        
+        # Add separator between users
+        if len(current_chunk) + 10 > 1900:
+            messages.append(current_chunk)
+            current_chunk = "---\n"
+        else:
+            current_chunk += "---\n"
+
+    if current_chunk.strip() and current_chunk.strip() != "---":
+        messages.append(current_chunk)
+        
+    if not messages:
+        messages.append("No problems solved this week.")
+        
+    return messages

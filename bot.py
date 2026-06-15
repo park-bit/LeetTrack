@@ -395,6 +395,52 @@ def _register_commands(bot: LeetCodeBot) -> None:
                 f"❌ Error during manual run: {exc}", ephemeral=True
             )
     @bot.tree.command(
+        name="lastweek",
+        description="Manually post the raw text summary of the past week's problems.",
+    )
+    async def lastweek_command(interaction: discord.Interaction) -> None:
+        await interaction.response.send_message("⏳ Gathering past week data...", ephemeral=True)
+        try:
+            import formatter
+            from datetime import timedelta, datetime
+            import pytz
+            import config
+            
+            profiles = bot.profile_manager.get_enabled_profiles()
+            tz = pytz.timezone(config.TIMEZONE)
+            today = datetime.now(tz=tz).date()
+            stored_week_start = bot.state.get_week_start()
+            
+            if not stored_week_start:
+                await interaction.edit_original_response(content="❌ Could not determine week start date.")
+                return
+                
+            delta_days = (today - stored_week_start).days
+            if delta_days <= 0:
+                delta_days = 7  # Force full week if run right at the start
+                
+            last_week_history = []
+            for i in range(delta_days):
+                d = stored_week_start + timedelta(days=i)
+                d_iso = d.isoformat()
+                day_dict = {}
+                for p in profiles:
+                    name = p["name"]
+                    probs = bot.state.get_day_problems(name, d_iso)
+                    if probs:
+                        day_dict[name] = probs
+                last_week_history.append((d, day_dict))
+                
+            text_chunks = formatter.build_weekly_raw_text_summary(profiles, last_week_history)
+            
+            await bot.discord_manager.send_weekly_text_summary(text_chunks)
+            await interaction.edit_original_response(content=f"✅ Dumped {len(text_chunks)} messages to <#{config.WEEKLY_TEXT_CHANNEL_ID}>.")
+                
+        except Exception as exc:
+            logger.error("Error in /lastweek: %s", exc, exc_info=True)
+            await interaction.edit_original_response(content=f"❌ Error: {exc}")
+
+    @bot.tree.command(
         name="roll",
         description="Force the bot to post a brand new message for the current week.",
     )

@@ -30,6 +30,7 @@ DISCORD_CHANNEL_ID: int = int(os.environ.get("DISCORD_CHANNEL_ID", "0"))
 # Optional: separate channel for permanent daily report archives (file uploads).
 # Set to 0 or leave blank to disable archiving.
 DISCORD_ARCHIVE_CHANNEL_ID: int = int(os.environ.get("DISCORD_ARCHIVE_CHANNEL_ID", "0"))
+WEEKLY_TEXT_CHANNEL_ID: int = 1516127365216993352
 
 if not DISCORD_TOKEN:
     raise EnvironmentError(
