@@ -195,7 +195,7 @@ class DailyScheduler:
             logger.info("Monday detected — starting new week.")
             
             if self._role_manager:
-                last_week_lb = self._lb_manager.get_weekly_leaderboard()
+                last_week_lb = self._lb_manager.build_weekly_leaderboard(profiles)
                 await self._role_manager.update_weekly_roles(last_week_lb)
                 
             self._lb_manager.reset_weekly_leaderboard(profiles)

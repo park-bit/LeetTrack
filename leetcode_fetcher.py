@@ -417,7 +417,7 @@ class LeetCodeFetcher:
 
     async def get_potd(self) -> dict[str, Any] | None:
         """Fetch the current Problem of the Day."""
-        data = await self._graphql(_POTD_QUERY)
+        data = await self._graphql(_POTD_QUERY, {})
         if not data:
             return None
             
