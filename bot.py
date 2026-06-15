@@ -417,7 +417,10 @@ def _register_commands(bot: LeetCodeBot) -> None:
                 
             delta_days = (today - stored_week_start).days
             if delta_days <= 0:
-                delta_days = 7  # Force full week if run right at the start
+                # If run right after the week resets, stored_week_start is today.
+                # Shift back 7 days to fetch the actual last week.
+                stored_week_start = today - timedelta(days=7)
+                delta_days = 7
                 
             last_week_history = []
             for i in range(delta_days):

@@ -451,14 +451,16 @@ def build_weekly_raw_text_summary(
                 title = sub.get("title", sub.get("slug", "Unknown"))
                 slug = sub.get("slug", "")
                 diff = sub.get("difficulty", "Unknown")
+                tags = sub.get("tags", [])
+                tag_str = f" [{', '.join(tags)}]" if tags else ""
                 url = f"https://leetcode.com/problems/{slug}/" if slug else ""
                 resub_str = " *(resubmission)*" if sub.get("is_resubmission") else ""
                 
                 # Wrapping URL in <> prevents discord embeds for that link
                 if url:
-                    user_lines.append(f"- [{title}](<{url}>) ({diff}){resub_str}")
+                    user_lines.append(f"- [{title}](<{url}>) ({diff}){tag_str}{resub_str}")
                 else:
-                    user_lines.append(f"- {title} ({diff}){resub_str}")
+                    user_lines.append(f"- {title} ({diff}){tag_str}{resub_str}")
             user_lines.append("") 
             
         if user_total == 0:
