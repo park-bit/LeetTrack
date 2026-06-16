@@ -215,7 +215,6 @@ class DailyScheduler:
                         last_week_history.append((d, day_dict))
                     
                     try:
-                        import formatter
                         text_chunks = formatter.build_weekly_raw_text_summary(profiles, last_week_history)
                         await self._discord_manager.send_weekly_text_summary(text_chunks)
                     except Exception as e:
