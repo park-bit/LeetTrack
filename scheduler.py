@@ -78,16 +78,15 @@ class DailyScheduler:
         """Register jobs and start the scheduler."""
         tz_str = config.TIMEZONE
 
-        # Daily job at configured hour:minute
+        # Daily job at configured hour:minute (runs midnight rollover wrapper)
         self._scheduler.add_job(
-            self.run_daily_job,
+            self.midnight_rollover,
             CronTrigger(
                 hour=config.DAILY_RUN_HOUR,
                 minute=config.DAILY_RUN_MINUTE,
                 timezone=tz_str,
             ),
             id="daily_job",
-            kwargs={"is_midnight_run": True},
             name="Daily LeetCode Report",
             max_instances=1,
             misfire_grace_time=300,  # 5 minutes
@@ -154,7 +153,25 @@ class DailyScheduler:
     # Daily job
     # ------------------------------------------------------------------
 
-    async def run_daily_job(self, force_new_message: bool = False, is_midnight_run: bool = False) -> tuple[discord.Embed, list[discord.Embed]]:
+    async def midnight_rollover(self) -> None:
+        """
+        Executes at exactly midnight.
+        1. Finalizes yesterday's stats and updates yesterday's discord message.
+        2. Resets stats and starts today's empty message.
+        """
+        now = datetime.now(tz=pytz.timezone(config.TIMEZONE))
+        yesterday = (now - timedelta(days=1)).date()
+        today = now.date()
+        
+        logger.info("=== Executing Midnight Rollover ===")
+        logger.info("Finalizing stats for yesterday: %s", yesterday.isoformat())
+        await self.run_daily_job(force_new_message=False, is_midnight_run=False, target_date=yesterday)
+        
+        logger.info("Initializing stats for today: %s", today.isoformat())
+        await self.run_daily_job(force_new_message=False, is_midnight_run=True, target_date=today)
+        logger.info("=== Midnight Rollover Complete ===")
+
+    async def run_daily_job(self, force_new_message: bool = False, is_midnight_run: bool = False, target_date: datetime.date | None = None) -> tuple[discord.Embed, list[discord.Embed]]:
         """
         Main daily job executed at midnight.
 
@@ -175,7 +192,7 @@ class DailyScheduler:
           10. Persist all state.
         """
         now = datetime.now(tz=pytz.timezone(config.TIMEZONE))
-        today = now.date()
+        today = target_date or now.date()
         logger.info("=== Daily job started: %s ===", today.isoformat())
 
         # Reload profiles
