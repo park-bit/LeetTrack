@@ -1,0 +1,13 @@
+sync_github:
+  stage: deploy
+  only:
+    - main
+
+  before_script:
+    - git config --global user.email "parthbhuskade@proton.me"
+    - git config --global user.name "park-bit"
+
+  script:
+    - git remote add github https://oauth2:${GITHUB_TOKEN}@github.com/park-bit/LeetTrack.git || true
+    - git push github HEAD:main --force
+    - git push github --tags --force
