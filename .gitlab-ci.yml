@@ -3,6 +3,7 @@ sync_github:
   only:
     - main
 
+
   before_script:
     - git config --global user.email "parthbhuskade@proton.me"
     - git config --global user.name "park-bit"
