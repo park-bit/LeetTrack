@@ -21,16 +21,11 @@ Zero manual intervention after setup — just add your profiles and let it run.
 | 🆓 **Completely Free** | No cloud services, no paid APIs — runs on your own machine |
 
 ---
-
-## 📸 Screenshots
-
-> _Add your screenshots here after first run._
-
-| Daily Report | Leaderboard |
-|---|---|
-| _(screenshot)_ | _(screenshot)_ |
-
----
+![WeekSummary](image.png)
+![Profile View](image-1.png)
+![Commands-3](image-4.png)
+![Commands 2](image-3.png)
+![Commands-1](image-2.png)
 
 ## 🚀 Installation
 
@@ -74,7 +69,7 @@ Copy `.env.example` to `.env` and fill in:
 ```dotenv
 # Required
 DISCORD_TOKEN=your_discord_bot_token
-DISCORD_CHANNEL_ID=123456789012345678
+DISCORD_CHANNEL_ID=Copy your channel Id for storing Report using Developer Mode in DC.
 
 # Optional (defaults shown)
 TIMEZONE=Asia/Kolkata
@@ -109,7 +104,7 @@ LOG_LEVEL=INFO
 
 ---
 
-## 👥 Adding Users
+## 👥 Adding Users (Can Also be done by /register command)
 
 Edit `profiles.json`:
 
@@ -293,6 +288,8 @@ Midnight trigger (APScheduler)
   ├─► Build Discord Embeds (formatter.py)
   └─► Send or Edit Discord message → Save state
 ```
+
+
 
 ---
 
