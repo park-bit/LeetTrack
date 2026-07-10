@@ -21,11 +21,17 @@ Zero manual intervention after setup — just add your profiles and let it run.
 | 🆓 **Completely Free** | No cloud services, no paid APIs — runs on your own machine |
 
 ---
-![WeekSummary](image.png)
-![Profile View](image-1.png)
-![Commands-3](image-4.png)
-![Commands 2](image-3.png)
-![Commands-1](image-5.png)
+---
+<details>
+  <summary>📸 View Project Screenshots</summary>
+
+  ![Commands-3](image-4.png)
+  ![WeekSummary](image.png)
+  ![Profile View](image-1.png)
+  ![Commands 2](image-3.png)
+  ![Commands-1](image-5.png)
+
+</details>
 
 ## 🚀 Installation
 
@@ -39,17 +45,17 @@ Zero manual intervention after setup — just add your profiles and let it run.
 
 ```bash
 # 1. Clone or download this project
-git clone https://github.com/your-username/leetcode-discord-bot.git
-cd leetcode-discord-bot
+git clone https://github.com/park-bit/LeetTrack.git
+cd LeetTrack
 
 # 2. Run the one-click setup
 setup.bat
 
 # 3. Edit your credentials
-notepad .env
+code .env
 
 # 4. Edit your user profiles
-notepad profiles.json
+code profiles.json
 
 # 5. Start the bot
 start.bat
