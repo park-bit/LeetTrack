@@ -1,93 +1,329 @@
-# Dsa Chan
+# 🧠 LeetCode Discord Bot
 
+A fully automated LeetCode tracking system for Discord servers.  
+Zero manual intervention after setup — just add your profiles and let it run.
 
+---
 
-## Getting started
+## ✨ Features
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+| Feature | Description |
+|---|---|
+| 📊 **Daily Reports** | Automatic midnight report with each user's solves, difficulty breakdown, and clickable problem links |
+| 🔥 **Streak Tracking** | Current and longest streaks, automatically broken if a day is missed |
+| 🏆 **Leaderboards** | Daily, weekly, and monthly rankings with tie-breaking by Hard → Medium → name |
+| 🗺️ **Roadmap Progress** | Track completion of a curated problem roadmap (customisable) |
+| 📈 **Weekly Summaries** | Weekly totals per user embedded alongside the daily report |
+| ⚠️ **Inactive Detection** | Highlights users who didn't solve anything today |
+| 💾 **Persistence** | All data survives restarts; corrupt files are backed up and recreated |
+| 🤖 **Slash Commands** | `/status`, `/run`, `/leaderboard` |
+| 🔁 **Self-healing** | Retries on LeetCode rate limits and Discord API errors with exponential backoff |
+| 🆓 **Completely Free** | No cloud services, no paid APIs — runs on your own machine |
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+---
 
-## Add your files
+## 📸 Screenshots
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+> _Add your screenshots here after first run._
+
+| Daily Report | Leaderboard |
+|---|---|
+| _(screenshot)_ | _(screenshot)_ |
+
+---
+
+## 🚀 Installation
+
+### Prerequisites
+
+- Python **3.11+** ([download](https://python.org/downloads/))
+- A Discord bot token ([guide below](#creating-a-discord-bot))
+- Internet access
+
+### Steps
+
+```bash
+# 1. Clone or download this project
+git clone https://github.com/your-username/leetcode-discord-bot.git
+cd leetcode-discord-bot
+
+# 2. Run the one-click setup
+setup.bat
+
+# 3. Edit your credentials
+notepad .env
+
+# 4. Edit your user profiles
+notepad profiles.json
+
+# 5. Start the bot
+start.bat
+```
+
+> **Note:** Everything (venv, logs, data, cache) stays inside the project folder.  
+> No global installs. No admin privileges required.
+
+---
+
+## ⚙️ Configuration
+
+### `.env` Variables
+
+Copy `.env.example` to `.env` and fill in:
+
+```dotenv
+# Required
+DISCORD_TOKEN=your_discord_bot_token
+DISCORD_CHANNEL_ID=123456789012345678
+
+# Optional (defaults shown)
+TIMEZONE=Asia/Kolkata
+DAILY_RUN_HOUR=0
+DAILY_RUN_MINUTE=0
+LOG_LEVEL=INFO
+```
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DISCORD_TOKEN` | ✅ | — | Bot token from Discord Developer Portal |
+| `DISCORD_CHANNEL_ID` | ✅ | — | Channel where reports are posted |
+| `TIMEZONE` | ❌ | `Asia/Kolkata` | Your local timezone ([list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)) |
+| `DAILY_RUN_HOUR` | ❌ | `0` | Hour (0–23) to run the daily job |
+| `DAILY_RUN_MINUTE` | ❌ | `0` | Minute (0–59) to run the daily job |
+| `LOG_LEVEL` | ❌ | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+
+---
+
+## 🏗️ Creating a Discord Bot
+
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click **New Application** → name it (e.g. "LeetCode Tracker")
+3. Go to **Bot** → click **Add Bot**
+4. Under **Token** → click **Copy** (paste into `.env` as `DISCORD_TOKEN`)
+5. Under **Privileged Gateway Intents** → no special intents needed
+6. Go to **OAuth2 → URL Generator**:
+   - Scopes: `bot`, `applications.commands`
+   - Bot Permissions: `Send Messages`, `Read Messages/View Channels`, `Embed Links`, `Read Message History`
+7. Copy the generated URL → open in browser → add bot to your server
+8. Enable **Developer Mode** in Discord Settings → right-click your channel → **Copy Channel ID** → paste as `DISCORD_CHANNEL_ID`
+
+---
+
+## 👥 Adding Users
+
+Edit `profiles.json`:
+
+```json
+[
+  {
+    "name": "Parth",
+    "leetcode_url": "https://leetcode.com/u/parth123/",
+    "enabled": true
+  },
+  {
+    "name": "Aman",
+    "leetcode_url": "https://leetcode.com/u/aman_dev/",
+    "enabled": true
+  }
+]
+```
+
+- **`name`**: Display name in Discord reports (can be anything)
+- **`leetcode_url`**: Full LeetCode profile URL — supports `/u/username/` and `/username/` formats
+- **`enabled`**: Set to `false` to pause tracking without removing the user
+
+> Profiles are **reloaded every midnight** — no restart needed to pick up changes.
+
+---
+
+## 🗺️ Roadmap Setup
+
+Add JSON files to the `roadmaps/` directory:
+
+```json
+{
+  "two-sum": 1,
+  "best-time-to-buy-and-sell-stock": 2,
+  "contains-duplicate": 3
+}
+```
+
+- You can create multiple files (e.g., `neetcode150.json`, `striver_a2z.json`).
+- Keys are **exact LeetCode problem titles or slugs** (case-insensitive matching).
+- Values are the roadmap position numbers.
+- The bot auto-matches solved problems against this list using both title and slug.
+
+The 58-problem starter roadmap included covers:
+- Arrays & Hashing
+- Two Pointers / Sliding Window
+- Stack
+- Binary Search
+- Linked Lists
+- Dynamic Programming
+
+---
+
+## ▶️ Running Locally
+
+```batch
+start.bat
+```
+
+The bot will:
+1. Connect to Discord
+2. Start the scheduler
+3. Run the daily job every midnight in your configured timezone
+4. Edit the same Discord message each day (new message every Monday)
+
+### Manual Trigger
+
+Use the `/run` slash command (bot owner only) to force the daily report immediately — useful for testing.
+
+---
+
+## 📊 Slash Commands
+
+| Command | Description | Who |
+|---|---|---|
+| `/status` | Bot status, last run time, monitored users | Everyone |
+| `/run` | Force-run the daily job immediately | Bot owner only |
+| `/leaderboard` | Show today's and this week's leaderboards | Everyone |
+
+---
+
+## 🔄 Updating Users
+
+To **add** a user: append to `profiles.json` (no restart needed — reloads at midnight)  
+To **disable** a user: set `"enabled": false`  
+To **remove** a user: delete their entry  
+
+Their historical data in `data/history.json` and `data/streaks.json` will be preserved.
+
+---
+
+## 🐛 Troubleshooting
+
+### Bot doesn't start
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/park-bit/dsa-chan.git
-git branch -M main
-git push -uf origin main
+EnvironmentError: DISCORD_TOKEN is not set
+```
+→ Make sure `.env` exists and `DISCORD_TOKEN` is filled in.
+
+### Channel not found
+
+```
+RuntimeError: Discord channel 123... not found
+```
+→ Ensure `DISCORD_CHANNEL_ID` is correct and the bot has access to that channel.
+
+### No submissions appearing
+
+- Verify the LeetCode URL in `profiles.json` is correct and public
+- Check `logs/bot.log` for API errors
+- LeetCode GraphQL only returns **accepted** submissions — submissions with wrong answers won't appear
+
+### Streak is wrong
+
+Streaks are calculated at midnight. If the bot was offline during a midnight run, the streak for that day may not have been recorded. You can `/run` manually to trigger a catch-up.
+
+### Corrupt JSON file
+
+If a data file becomes corrupt, the bot automatically:
+1. Backs up the corrupt file with a timestamp suffix
+2. Recreates it with safe defaults
+3. Continues running
+
+---
+
+## 🏛️ Project Architecture
+
+```
+leetcode-discord-bot/
+│
+├── bot.py                 # Entry point, Discord client, slash commands
+├── config.py              # Environment config, path constants
+├── scheduler.py           # APScheduler daily/monthly job orchestration
+├── formatter.py           # Discord Embed builders
+├── leetcode_fetcher.py    # Async LeetCode GraphQL client
+├── profile_manager.py     # Profile loading & validation
+├── roadmap_manager.py     # Roadmap loading & progress computation
+├── streak_manager.py      # Current/longest streak logic
+├── leaderboard_manager.py # Daily/weekly/monthly leaderboard builders
+├── discord_manager.py     # Discord message send/edit/retry logic
+├── state_manager.py       # All persistence (atomic JSON writes)
+│
+├── profiles.json          # ← Edit this: your LeetCode users
+├── roadmaps/              # ← Add JSON files here for your problem roadmaps
+├── state.json             # Auto-managed: bot runtime state
+│
+├── data/
+│   ├── user_stats.json    # Per-user solve counts, weekly/daily totals
+│   ├── streaks.json       # Per-user streak data
+│   └── history.json       # Per-user daily problem history
+│
+├── logs/
+│   └── bot.log            # Rotating log (5 MB × 5 files)
+│
+├── .venv/                 # Local Python virtual environment
+├── .env                   # Your secrets (git-ignored)
+├── .env.example           # Template for .env
+├── requirements.txt       # Python dependencies
+├── setup.bat              # One-click environment setup
+└── start.bat              # One-click bot launcher
 ```
 
-## Integrate with your tools
+### Data Flow
 
-* [Set up project integrations](https://gitlab.com/park-bit/dsa-chan/-/settings/integrations)
+```
+Midnight trigger (APScheduler)
+  │
+  ├─► Reload profiles.json
+  ├─► Monday? → Reset weekly counters, create new Discord message
+  ├─► Reset daily counters
+  │
+  ├─► LeetCode GraphQL API (for each user)
+  │     └─► Get recent accepted submissions
+  │
+  ├─► Compute today's new solves (diff against known_accepted)
+  ├─► Update streaks
+  ├─► Accumulate weekly/monthly totals
+  ├─► Compute roadmap progress
+  │
+  ├─► Build Discord Embeds (formatter.py)
+  └─► Send or Edit Discord message → Save state
+```
 
-## Collaborate with your team
+---
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## ❓ FAQ
 
-## Test and Deploy
+**Q: Does this use the official LeetCode API?**  
+A: Yes — it uses the public GraphQL API at `leetcode.com/graphql`, the same one the LeetCode website uses. No scraping.
 
-Use the built-in continuous integration in GitLab.
+**Q: Will LeetCode ban my IP?**  
+A: Very unlikely. The bot only makes a handful of requests per day (once at midnight, one request per user). It implements rate limiting, backoff, and respects 429 responses.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+**Q: Can I run this 24/7?**  
+A: Yes. It's lightweight — CPU usage is near zero between midnight jobs.
 
-***
+**Q: What if I miss a midnight run (PC off)?**  
+A: Use `/run` to trigger the job manually when you come back online.
 
-# Editing this README
+**Q: Can I add more than 3 users?**  
+A: Yes — there's no limit. Just add more entries to `profiles.json`.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+**Q: Can I change the roadmaps?**  
+A: Yes — add or edit JSON files inside the `roadmaps/` folder. Problem matching uses both exact title and slug.
 
-## Suggestions for a good README
+**Q: Can I change the daily run time?**  
+A: Yes — set `DAILY_RUN_HOUR` and `DAILY_RUN_MINUTE` in `.env`.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+**Q: Is data backed up?**  
+A: All JSON files use atomic writes (write to `.tmp` then rename). Corrupt files are backed up automatically. For long-term safety, keep the `data/` folder in a backup location.
 
-## Name
-Choose a self-explaining name for your project.
+---
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## 📄 License
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT — free to use, modify, and self-host.
