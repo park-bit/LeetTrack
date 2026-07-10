@@ -1,0 +1,25 @@
+variables:
+  GIT_DEPTH: 0
+
+sync_github:
+  stage: deploy
+
+  only:
+    - main
+
+  before_script:
+    - git config --global user.email "parthbhuskade@proton.me"
+    - git config --global user.name "park-bit"
+
+  script:
+    # Ensure full repository history is available
+    - git fetch --unshallow || true
+    - git fetch --all --tags
+
+    # Add GitHub remote
+    - git remote remove github || true
+    - git remote add github https://oauth2:${GITHUB_TOKEN}@github.com/park-bit/LeetTrack.git
+
+    # Push branch and tags to GitHub
+    - git push github HEAD:refs/heads/main --force
+    - git push github --tags --force
