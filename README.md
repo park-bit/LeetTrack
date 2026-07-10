@@ -1,7 +1,8 @@
-# 🧠 LeetCode Discord Bot
+# LeetCode Discord Bot
 
 A fully automated LeetCode tracking system for Discord servers.  
 Zero manual intervention after setup — just add your profiles and let it run.
+CAN BE HOSTED ON RENDER FOR FREE TIER!!
 
 ---
 
