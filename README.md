@@ -25,7 +25,7 @@ Zero manual intervention after setup — just add your profiles and let it run.
 ![Profile View](image-1.png)
 ![Commands-3](image-4.png)
 ![Commands 2](image-3.png)
-![Commands-1](image-2.png)
+![Commands-1](image-5.png)
 
 ## 🚀 Installation
 
