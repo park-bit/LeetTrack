@@ -112,23 +112,23 @@ class DailyScheduler:
             max_instances=1,
         )
 
-        # Problem of the Day at 20:00 (8 PM)
+        # Problem of the Day at 00:05 UTC (5:35 AM IST) right when LeetCode resets it
         self._scheduler.add_job(
             self.run_potd,
-            CronTrigger(hour=20, minute=0, timezone=tz_str),
+            CronTrigger(hour=0, minute=5, timezone=tz_str),
             id="potd_job",
             name="Problem of the Day",
             max_instances=1,
             misfire_grace_time=300,
         )
 
-        # Evening Nudge Ping at 22:00
+        # Evening Nudge Ping at 22:00 (10 PM) IST
         self._scheduler.add_job(
             self.run_evening_nudge,
             CronTrigger(
                 hour=22,
                 minute=0,
-                timezone=tz_str,
+                timezone="Asia/Kolkata",
             ),
             id="evening_nudge",
             name="Evening 10 PM Nudge Ping",
@@ -206,10 +206,12 @@ class DailyScheduler:
         is_monday = today.weekday() == 0
 
         stored_week_start = self._state.get_week_start()
+        is_new_week_rollover = False
 
         # If it's Monday and a new week hasn't started yet, or week_start is missing
         if is_monday and (stored_week_start is None or stored_week_start != today):
-            logger.info("Monday detected — starting new week.")
+            logger.info("Monday detected - starting new week.")
+            is_new_week_rollover = True
             
             if self._role_manager:
                 last_week_lb = self._lb_manager.build_weekly_leaderboard(profiles)
@@ -392,7 +394,7 @@ class DailyScheduler:
 
         # Update streaks
         solve_counts = {name: daily_stats[name]["solved"] for name in daily_stats}
-        self._streak_manager.update_all(solve_counts, today)
+        self._streak_manager.update_all(solve_counts, today, is_day_end=is_midnight_run)
 
         if self._role_manager:
             all_streaks = self._streak_manager.get_all_streaks()
@@ -433,8 +435,8 @@ class DailyScheduler:
         )
 
         # Publish to Discord
-        if force_new_message or (is_monday and (self._state.get_week_start() == today)):
-            # First Monday of new week OR forced by /roll — send a fresh message
+        if force_new_message or is_new_week_rollover:
+            # First Monday of new week OR forced by /roll - send a fresh message
             await self._discord_manager.start_new_week(summary_embed, detailed_embeds)
         else:
             await self._discord_manager.publish_or_update(summary_embed, detailed_embeds)

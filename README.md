@@ -179,7 +179,7 @@ The bot will:
 
 ### Manual Trigger
 
-Use the `/run` slash command (bot owner only) to force the daily report immediately — useful for testing.
+Use the `/run` slash command (bot owner only) to force the daily report immediately (useful for testing).
 
 ---
 
@@ -200,6 +200,7 @@ Use the `/run` slash command (bot owner only) to force the daily report immediat
 | `/admin remove` | Remove a user profile from database | Admins only |
 | `/admin link` | Quick-link a Discord user to a LeetCode profile | Admins only |
 | `/admin setstreak` | Manually set current or longest streak for a user | Admins only |
+| `/admin cleanup` | Clean up older duplicate summary messages from channel | Admins only |
 | `/admin reload` | Force reload database profiles and state | Admins only |
 
 ---

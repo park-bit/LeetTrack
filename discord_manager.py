@@ -256,11 +256,49 @@ class DiscordManager:
 
     async def start_new_week(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> None:
         """
-        Send a brand-new message for the new week.
+        Send a brand-new message for the new week and clean up older summaries.
         """
-        logger.info("Starting new week — creating fresh report message.")
+        logger.info("Starting new week - creating fresh report message.")
         self._state.set_message_id(None)
         await self.send_report(summary_embed, detailed_embeds)
+        await self.cleanup_channel_duplicates(keep_current_message=True)
+
+    async def cleanup_channel_duplicates(self, keep_current_message: bool = True) -> int:
+        """
+        Delete older duplicate 'Weekly LeetCode Summary' messages in the report channel,
+        leaving only the current active report message.
+        """
+        channel = await self.get_channel()
+        current_id = self._state.get_message_id() if keep_current_message else None
+        deleted_count = 0
+
+        try:
+            async for msg in channel.history(limit=50):
+                if msg.author.id != self._client.user.id:
+                    continue
+                if current_id and msg.id == current_id:
+                    continue
+
+                is_report = False
+                if msg.embeds:
+                    for embed in msg.embeds:
+                        if embed.title and "Weekly LeetCode Summary" in embed.title:
+                            is_report = True
+                            break
+
+                if is_report:
+                    try:
+                        await msg.delete()
+                        deleted_count += 1
+                        await asyncio.sleep(0.5)
+                    except Exception as exc:
+                        logger.warning("Failed to delete duplicate message %d: %s", msg.id, exc)
+
+            logger.info("Cleaned up %d duplicate report message(s).", deleted_count)
+        except Exception as exc:
+            logger.error("Error during channel duplicate cleanup: %s", exc)
+
+        return deleted_count
 
     # ------------------------------------------------------------------
     # Utility

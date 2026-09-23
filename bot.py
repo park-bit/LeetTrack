@@ -1487,6 +1487,25 @@ def _register_commands(bot: LeetCodeBot) -> None:
         await interaction.response.send_message("🔄 Database state and profiles reloaded.", ephemeral=True)
         logger.info("Admin reloaded database state by %s.", interaction.user)
 
+    @admin_group.command(
+        name="cleanup",
+        description="Clean up duplicate/older weekly summary messages from the channel.",
+    )
+    async def admin_cleanup(interaction: discord.Interaction) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.discord_manager is not None
+        await interaction.response.defer(ephemeral=True)
+
+        deleted = await bot.discord_manager.cleanup_channel_duplicates(keep_current_message=True)
+        await interaction.followup.send(
+            f"🧹 Cleaned up **{deleted}** duplicate report message(s). Only the active summary remains.",
+            ephemeral=True,
+        )
+        logger.info("Admin cleaned up %d duplicate messages by %s.", deleted, interaction.user)
+
     # Register admin group on the command tree
     bot.tree.add_command(admin_group)
 

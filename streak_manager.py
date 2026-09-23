@@ -49,11 +49,14 @@ class StreakManager:
         username: str,
         solved_today: bool,
         today: date,
+        is_day_end: bool = False,
     ) -> None:
         """
         Update streak for *username* based on whether they solved problems today.
 
-        This should be called once per day per user after the daily fetch.
+        If is_day_end is True (at calendar day rollover), users who did not solve
+        yesterday have their active streak reset to 0. During hourly syncs during the day,
+        streaks remain intact pending today's solves.
         """
         streak_data: dict[str, Any] = self._state.get_streak(username)
         current: int = streak_data["current"]
@@ -72,13 +75,13 @@ class StreakManager:
                 # First ever solve
                 current = 1
             elif last_active == today:
-                # Already counted today (shouldn't normally happen, but safe)
+                # Already counted today
                 pass
             elif last_active == today - timedelta(days=1):
-                # Consecutive day
+                # Consecutive day solve
                 current += 1
             else:
-                # Missed one or more days — streak reset
+                # Missed one or more days, fresh start
                 current = 1
 
             if current > longest:
@@ -88,13 +91,13 @@ class StreakManager:
         else:
             # No solve today
             if last_active is not None and last_active < today - timedelta(days=1):
-                # Missed yesterday — break the streak
+                # Missed yesterday or earlier - streak broken
                 current = 0
-            # If last_active == yesterday or today, streak stays intact
-            # (user hasn't had a chance to solve today yet, but since this
-            #  runs at midnight we know today is over — streak broken)
-            elif last_active is not None and last_active < today:
+            elif is_day_end and last_active is not None and last_active < today:
+                # Day rollover completed with no solves - streak broken
                 current = 0
+            # If not is_day_end and last_active == today - 1:
+            # User still has time before day rollover - keep streak intact
 
         streak_data["current"] = current
         streak_data["longest"] = longest
@@ -104,27 +107,30 @@ class StreakManager:
         self._state.set_streak(username, streak_data)
 
         logger.info(
-            "Streak updated for %s: current=%d, longest=%d, last_active=%s",
+            "Streak updated for %s: current=%d, longest=%d, last_active=%s (is_day_end=%s)",
             username,
             current,
             longest,
             last_active,
+            is_day_end,
         )
 
     def update_all(
         self,
         solve_counts: dict[str, int],
         today: date,
+        is_day_end: bool = False,
     ) -> None:
         """
         Update streaks for all users.
 
         Args:
             solve_counts: Mapping of ``{display_name: problems_solved_today}``.
-            today: The local date representing today.
+            today: The date representing today.
+            is_day_end: True only at daily rollover.
         """
         for username, count in solve_counts.items():
-            self.update(username, solved_today=count > 0, today=today)
+            self.update(username, solved_today=count > 0, today=today, is_day_end=is_day_end)
 
     # ------------------------------------------------------------------
     # Query

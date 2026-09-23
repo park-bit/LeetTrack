@@ -49,16 +49,17 @@ if not DISCORD_CHANNEL_ID:
     )
 
 # ---------------------------------------------------------------------------
-# Timezone
+# Timezone & Day Rollover
 # ---------------------------------------------------------------------------
 
-TIMEZONE: str = os.environ.get("TIMEZONE", "Asia/Kolkata")
+# LeetCode calendar day changes at 00:00 UTC (05:30 AM IST).
+TIMEZONE: str = os.environ.get("TIMEZONE", "UTC")
 
 # ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
 
-# Hour and minute (local time) at which the daily job runs.
+# Hour and minute at which daily calendar rollover runs (default: 00:00 UTC).
 DAILY_RUN_HOUR: int = int(os.environ.get("DAILY_RUN_HOUR", "0"))
 DAILY_RUN_MINUTE: int = int(os.environ.get("DAILY_RUN_MINUTE", "0"))
 
