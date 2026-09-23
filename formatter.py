@@ -89,7 +89,7 @@ def build_daily_embed(
         diff_str = " · ".join(diff_parts) if diff_parts else "Easy: 0"
 
         mention = f" <@{discord_id}>" if discord_id else ""
-        field_header = f"**{name}**{mention} — {stats['solved']} solved ({diff_str})"
+        field_header = f"**{name}**{mention}: {stats['solved']} solved ({diff_str})"
 
         # Problem lines: "1. Title (Difficulty) [Tag1][Tag2] [link]"
         problem_lines: list[str] = []
@@ -204,10 +204,10 @@ def build_weekly_aggregate_embeds(
             if easy: diff_parts.append(f"Easy: {easy}")
             if medium: diff_parts.append(f"Med: {medium}")
             if hard: diff_parts.append(f"Hard: {hard}")
-            diff_str = " · ".join(diff_parts) if diff_parts else "—"
+            diff_str = " · ".join(diff_parts) if diff_parts else "-"
 
             # Put color in field name, but NOT the mention (Discord fields don't parse mentions in names)
-            field_name = f"{color_emoji} **{name}** — {len(problems)} solved ({diff_str})"
+            field_name = f"{color_emoji} **{name}**: {len(problems)} solved ({diff_str})"
 
             lines = []
             # Mentions only render in field values!
@@ -339,7 +339,7 @@ def build_weekly_summary_embed(
         if stats["easy"]: diff_parts.append(f"Easy: {stats['easy']}")
         if stats["medium"]: diff_parts.append(f"Med: {stats['medium']}")
         if stats["hard"]: diff_parts.append(f"Hard: {stats['hard']}")
-        diff_str = " · ".join(diff_parts) if diff_parts else "—"
+        diff_str = " · ".join(diff_parts) if diff_parts else "-"
         
         embed.add_field(
             name=f"{color_emoji} {name}",

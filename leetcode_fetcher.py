@@ -24,7 +24,9 @@ import asyncio
 import logging
 import re
 import time
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -32,6 +34,29 @@ import aiohttp
 import config
 
 logger = logging.getLogger(__name__)
+
+_CACHE_FILE = config.DATA_DIR / "problem_cache.json"
+
+
+def _load_problem_cache() -> dict[str, dict[str, Any]]:
+    if _CACHE_FILE.exists():
+        try:
+            return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Could not load problem cache: %s", exc)
+    return {}
+
+
+def _save_problem_cache(cache: dict[str, dict[str, Any]]) -> None:
+    try:
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.warning("Could not save problem cache: %s", exc)
+
+
+_GLOBAL_PROBLEM_CACHE: dict[str, dict[str, Any]] = _load_problem_cache()
+
 
 # ---------------------------------------------------------------------------
 # Data models
@@ -195,9 +220,8 @@ class LeetCodeFetcher:
 
     def __init__(self) -> None:
         self._session: aiohttp.ClientSession | None = None
-        # Cache full problem info to reduce GraphQL calls
-        # {slug: {"difficulty": str, "tags": list[str]}}
-        self._problem_cache: dict[str, dict[str, Any]] = {}
+        # Shared global cache across all fetcher instances to avoid re-fetching problem details
+        self._problem_cache: dict[str, dict[str, Any]] = _GLOBAL_PROBLEM_CACHE
 
     async def __aenter__(self) -> "LeetCodeFetcher":
         timeout = aiohttp.ClientTimeout(total=config.REQUEST_TIMEOUT)
@@ -407,6 +431,7 @@ class LeetCodeFetcher:
             tags = []
 
         self._problem_cache[slug] = {"difficulty": difficulty, "tags": tags}
+        _save_problem_cache(self._problem_cache)
         # Small delay to avoid hammering the API
         await asyncio.sleep(0.3)
         return difficulty, tags

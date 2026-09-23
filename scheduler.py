@@ -434,12 +434,77 @@ class DailyScheduler:
             daily_history=daily_history,
         )
 
-        # Publish to Discord
-        if force_new_message or is_new_week_rollover:
-            # First Monday of new week OR forced by /roll - send a fresh message
-            await self._discord_manager.start_new_week(summary_embed, detailed_embeds)
-        else:
-            await self._discord_manager.publish_or_update(summary_embed, detailed_embeds)
+        # Distribute reports across configured Discord guilds
+        client = self._discord_manager._client
+        guilds = client.guilds if client and hasattr(client, "guilds") else []
+        handled_guild_ids = set()
+
+        for guild in guilds:
+            cfg = self._state.get_guild_config(guild.id)
+            channel_id = cfg.get("channel_id")
+            if not channel_id and guild.get_channel(config.DISCORD_CHANNEL_ID):
+                channel_id = config.DISCORD_CHANNEL_ID
+
+            if not channel_id:
+                continue
+
+            # Filter profiles for this guild: member must be present in guild,
+            # or if primary channel and profile is unlinked
+            is_primary_guild = (channel_id == config.DISCORD_CHANNEL_ID)
+            guild_profiles = []
+            for p in profiles:
+                did = p.get("discord_id")
+                if did:
+                    if guild.get_member(int(did)) is not None:
+                        guild_profiles.append(p)
+                elif is_primary_guild:
+                    guild_profiles.append(p)
+
+            if not guild_profiles:
+                logger.info("No members found in guild %s (%d): skipping report.", guild.name, guild.id)
+                continue
+
+            # Build guild-specific history and embeds
+            guild_daily_history = []
+            guild_profile_names = {p["name"] for p in guild_profiles}
+            for d, day_dict in daily_history:
+                filtered_day = {
+                    name: probs for name, probs in day_dict.items()
+                    if name in guild_profile_names
+                }
+                guild_daily_history.append((d, filtered_day))
+
+            g_detailed = formatter.build_weekly_aggregate_embeds(
+                profiles=guild_profiles,
+                daily_history=guild_daily_history,
+            )
+            g_summary = formatter.build_weekly_summary_embed(
+                profiles=guild_profiles,
+                daily_history=guild_daily_history,
+            )
+
+            if force_new_message or is_new_week_rollover:
+                await self._discord_manager.start_new_week(
+                    g_summary,
+                    g_detailed,
+                    channel_id=channel_id,
+                    guild_id=guild.id,
+                )
+            else:
+                await self._discord_manager.publish_or_update(
+                    g_summary,
+                    g_detailed,
+                    channel_id=channel_id,
+                    guild_id=guild.id,
+                )
+            handled_guild_ids.add(guild.id)
+
+        # Fallback if no guilds were processed (e.g. single guild setup or test run)
+        if not handled_guild_ids and config.DISCORD_CHANNEL_ID:
+            if force_new_message or is_new_week_rollover:
+                await self._discord_manager.start_new_week(summary_embed, detailed_embeds)
+            else:
+                await self._discord_manager.publish_or_update(summary_embed, detailed_embeds)
 
         # Persist state
         self._state.set_last_run(now)
@@ -454,7 +519,7 @@ class DailyScheduler:
         self._state.save()
 
         logger.info("=== Daily job completed: %s ===", today.isoformat())
-        
+
         return summary_embed, detailed_embeds
 
     # ------------------------------------------------------------------
@@ -476,7 +541,7 @@ class DailyScheduler:
     async def run_evening_nudge(self) -> None:
         """
         Check all enabled profiles at 10:00 PM.
-        If they have exactly 0 accepted submissions today, add them to a list and ping them.
+        If they have exactly 0 accepted submissions today, ping them per guild.
         """
         now = datetime.now(tz=pytz.timezone(config.TIMEZONE))
         today = now.date()
@@ -485,44 +550,63 @@ class DailyScheduler:
         self._profile_manager.load()
         profiles = self._profile_manager.get_enabled_profiles()
         if not profiles:
-            logger.warning("No enabled profiles found — skipping evening nudge.")
+            logger.warning("No enabled profiles found: skipping evening nudge.")
             return
 
         from leetcode_fetcher import LeetCodeFetcher
 
-        slackers = []
+        slackers: list[tuple[str, int]] = []
 
         async with LeetCodeFetcher() as fetcher:
             for profile in profiles:
                 name = profile["name"]
                 url = profile["leetcode_url"]
                 discord_id = profile.get("discord_id")
-                
+
                 if not discord_id:
                     continue
-    
+
                 try:
-                    # Fetch their absolute latest submissions
                     subs = await fetcher.get_accepted_submissions(url)
-                    
-                    # Count how many were solved "today" based on timezone
                     today_solves = 0
                     for sub in subs:
                         sub_time = datetime.fromtimestamp(sub.timestamp, tz=pytz.timezone(config.TIMEZONE))
                         if sub_time.date() == today:
                             today_solves += 1
-    
+
                     if today_solves == 0:
-                        slackers.append(f"<@{discord_id}>")
-    
+                        slackers.append((f"<@{discord_id}>", int(discord_id)))
+
                 except Exception as e:
                     logger.error("Failed to fetch submissions for %s during nudge: %s", name, e)
 
-        if slackers:
-            logger.info("Found %d slackers. Sending nudge ping.", len(slackers))
-            await self._discord_manager.send_nudge_ping(slackers)
-        else:
+        if not slackers:
             logger.info("No slackers found! Everyone is on fire today 🔥")
+            return
+
+        logger.info("Found %d slackers. Distributing nudge pings.", len(slackers))
+        client = self._discord_manager._client
+        guilds = client.guilds if client and hasattr(client, "guilds") else []
+        nudged_guilds = set()
+
+        for guild in guilds:
+            cfg = self._state.get_guild_config(guild.id)
+            channel_id = cfg.get("channel_id")
+            if not channel_id and guild.get_channel(config.DISCORD_CHANNEL_ID):
+                channel_id = config.DISCORD_CHANNEL_ID
+            if not channel_id:
+                continue
+
+            guild_slackers = [
+                tag for tag, did in slackers
+                if guild.get_member(did) is not None
+            ]
+            if guild_slackers:
+                await self._discord_manager.send_nudge_ping(guild_slackers, channel_id=channel_id)
+                nudged_guilds.add(guild.id)
+
+        if not nudged_guilds and config.DISCORD_CHANNEL_ID:
+            await self._discord_manager.send_nudge_ping([tag for tag, _ in slackers])
 
     # ------------------------------------------------------------------
     # Manual trigger (for testing / on-demand runs)
@@ -546,16 +630,12 @@ class DailyScheduler:
     ) -> None:
         """
         Save today's report as a Markdown file under reports/<date>.md.
-
-        These files act as a permanent local archive — they survive Discord
-        message deletion, bot removal, or channel wipes.  Each file is
-        human-readable and can be committed to a git repo for off-site backup.
         """
         config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
         filepath = config.REPORTS_DIR / f"{today.isoformat()}.md"
 
         lines: list[str] = [
-            f"# Daily LeetCode Report — {today.strftime('%A, %d %B %Y')}",
+            f"# Daily LeetCode Report: {today.strftime('%A, %d %B %Y')}",
             f"> Generated: {datetime.now(tz=pytz.timezone(config.TIMEZONE)).strftime('%Y-%m-%d %H:%M:%S %Z')}",
             "",
         ]
@@ -600,7 +680,7 @@ class DailyScheduler:
 
         try:
             filepath.write_text("\n".join(lines), encoding="utf-8")
-            logger.info("Daily report archived locally → %s", filepath)
+            logger.info("Daily report archived locally: %s", filepath)
 
             # Upload to Discord Archive Channel
             await self._discord_manager.archive_daily_report(
@@ -611,15 +691,32 @@ class DailyScheduler:
             logger.error("Could not write daily report archive: %s", exc)
 
     async def run_potd(self) -> None:
-        """Fetch the LeetCode POTD and post it to Discord."""
+        """Fetch the LeetCode POTD and post it to Discord across all configured servers."""
         logger.info("Running Problem of the Day check...")
         try:
             async with LeetCodeFetcher() as fetcher:
                 potd_data = await fetcher.get_potd()
-                
-            if potd_data:
-                await self._discord_manager.send_potd(potd_data)
-            else:
+
+            if not potd_data:
                 logger.warning("Failed to fetch POTD data.")
+                return
+
+            client = self._discord_manager._client
+            guilds = client.guilds if client and hasattr(client, "guilds") else []
+            posted_guilds = set()
+
+            for guild in guilds:
+                cfg = self._state.get_guild_config(guild.id)
+                if not cfg.get("potd_enabled", True):
+                    continue
+                potd_chan = cfg.get("potd_channel_id") or cfg.get("channel_id")
+                if not potd_chan and guild.get_channel(config.DISCORD_CHANNEL_ID):
+                    potd_chan = config.DISCORD_CHANNEL_ID
+                if potd_chan:
+                    await self._discord_manager.send_potd(potd_data, channel_id=potd_chan)
+                    posted_guilds.add(guild.id)
+
+            if not posted_guilds and config.DISCORD_CHANNEL_ID:
+                await self._discord_manager.send_potd(potd_data, channel_id=config.DISCORD_CHANNEL_ID)
         except Exception as exc:
             logger.error("Error running POTD job: %s", exc)

@@ -55,6 +55,7 @@ class StateManager:
         "week_start": None,          # ISO date string, e.g. "2024-06-03"
         "last_run": None,            # ISO datetime string
         "monthly_leaderboard": {},   # {username: total_monthly_count}
+        "guilds": {},                # {guild_id: {channel_id, potd_channel_id, potd_enabled, current_message_id}}
     }
 
     # Default structure for user_stats.json
@@ -107,12 +108,64 @@ class StateManager:
     # ------------------------------------------------------------------
 
     def get_message_id(self) -> int | None:
-        """Return the current Discord report message ID, or None."""
+        """Return the fallback Discord report message ID, or None."""
         val = self._state.get("current_message_id")
         return int(val) if val is not None else None
 
     def set_message_id(self, message_id: int | None) -> None:
         self._state["current_message_id"] = message_id
+
+    # ------------------------------------------------------------------
+    # Guild / Server Management
+    # ------------------------------------------------------------------
+
+    def get_guild_config(self, guild_id: int | str) -> dict[str, Any]:
+        """Return the configuration dict for a guild."""
+        guilds = self._state.setdefault("guilds", {})
+        gid = str(guild_id)
+        return guilds.setdefault(
+            gid,
+            {
+                "channel_id": None,
+                "potd_channel_id": None,
+                "potd_enabled": True,
+                "current_message_id": None,
+            },
+        )
+
+    def set_guild_channel(self, guild_id: int | str, channel_id: int) -> None:
+        """Set the main report channel for a guild."""
+        cfg = self.get_guild_config(guild_id)
+        cfg["channel_id"] = int(channel_id)
+        self.save()
+
+    def set_guild_potd(
+        self,
+        guild_id: int | str,
+        channel_id: int | None,
+        enabled: bool = True,
+    ) -> None:
+        """Set the POTD channel and enable/disable flag for a guild."""
+        cfg = self.get_guild_config(guild_id)
+        cfg["potd_channel_id"] = int(channel_id) if channel_id is not None else None
+        cfg["potd_enabled"] = bool(enabled)
+        self.save()
+
+    def get_guild_message_id(self, guild_id: int | str) -> int | None:
+        """Get the current report message ID for a guild."""
+        cfg = self.get_guild_config(guild_id)
+        val = cfg.get("current_message_id")
+        return int(val) if val is not None else None
+
+    def set_guild_message_id(self, guild_id: int | str, message_id: int | None) -> None:
+        """Set the current report message ID for a guild."""
+        cfg = self.get_guild_config(guild_id)
+        cfg["current_message_id"] = int(message_id) if message_id is not None else None
+        self.save()
+
+    def get_all_guild_configs(self) -> dict[str, dict[str, Any]]:
+        """Return all stored guild configurations."""
+        return self._state.setdefault("guilds", {})
 
     def get_week_start(self) -> date | None:
         """Return the Monday that started the current week, or None."""

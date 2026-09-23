@@ -132,7 +132,7 @@ class DatabaseManager:
             with path.open("r", encoding="utf-8") as fh:
                 return json.load(fh)
         except (json.JSONDecodeError, OSError) as exc:
-            logger.error("Corrupt/unreadable JSON at %s (%s) — using default.", path, exc)
+            logger.error("Corrupt/unreadable JSON at %s (%s): using default.", path, exc)
             self._backup_corrupted(path)
             return default
 

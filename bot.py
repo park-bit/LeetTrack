@@ -7,14 +7,14 @@ Initialises all managers, starts the APScheduler, and connects to
 Discord.  Handles graceful shutdown on SIGINT / SIGTERM.
 
 Bot slash commands:
-  /status       — Show bot status, last run time, and upcoming schedule.
-  /run          — Manually trigger the daily report (owner-only).
-  /leaderboard  — Show current weekly leaderboard on demand.
-  /weeksummary  — Weekly summary with pie + bar chart.
-  /history      — Fetch the LeetCode summary for a specific date.
-  /register     — Link your LeetCode profile to your Discord account.
-  /unregister   — Remove your profile from the tracker.
-  /profile      — View your linked LeetCode profile.
+  /status       - Show bot status, last run time, and upcoming schedule.
+  /run          - Manually trigger the daily report (owner-only).
+  /leaderboard  - Show current weekly leaderboard on demand.
+  /weeksummary  - Weekly summary with pie + bar chart.
+  /history      - Fetch the LeetCode summary for a specific date.
+  /register     - Link your LeetCode profile to your Discord account.
+  /unregister   - Remove your profile from the tracker.
+  /profile      - View your linked LeetCode profile.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ class LeetCodeBot(discord.Client):
 
     def __init__(self) -> None:
         intents = discord.Intents.default()
-        intents.message_content = False  # not needed — we only check message.mentions
+        intents.message_content = False  # not needed: we only check message.mentions
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
@@ -109,7 +109,7 @@ class LeetCodeBot(discord.Client):
         self.role_manager: RoleManager | None = None
 
     async def setup_hook(self) -> None:
-        """Called by discord.py before connecting — initialise everything."""
+        """Called by discord.py before connecting: initialise everything."""
         # Managers
         self.state = StateManager()
         self.state.load()
@@ -297,6 +297,8 @@ def _register_commands(bot: LeetCodeBot) -> None:
         embed.add_field(name="`/unregister`", value="Remove your LeetCode profile from the bot.", inline=False)
         embed.add_field(name="`/profile`", value="Check which LeetCode profile is linked to your Discord account.", inline=False)
         embed.add_field(name="`/admin`", value="Manage database profiles, names, Discord IDs, and streaks (Admin only).", inline=False)
+        embed.add_field(name="`/setup`", value="Configure report channel and check permissions for this server (Admin only).", inline=False)
+        embed.add_field(name="`/report`", value="Configure report channel or POTD toggle for this server (Admin only).", inline=False)
         embed.add_field(name="`@DSA-chan`", value="Ping me anywhere to instantly see your stats for today.", inline=False)
         
         await interaction.response.send_message(embed=embed)
@@ -483,6 +485,18 @@ def _register_commands(bot: LeetCodeBot) -> None:
         assert bot.profile_manager is not None
 
         profiles = bot.profile_manager.get_enabled_profiles()
+        if interaction.guild:
+            guild_profiles = []
+            for p in profiles:
+                did = p.get("discord_id")
+                if did:
+                    if interaction.guild.get_member(int(did)) is not None:
+                        guild_profiles.append(p)
+                else:
+                    guild_profiles.append(p)
+            if guild_profiles:
+                profiles = guild_profiles
+
         weekly_lb = bot.leaderboard_manager.build_weekly_leaderboard(profiles)
         daily_lb = bot.leaderboard_manager.build_daily_leaderboard(profiles)
 
@@ -496,7 +510,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
             medals = {1: "🥇", 2: "🥈", 3: "🥉"}
             medal = medals.get(entry["rank"], "")
             daily_lines.append(
-                f"{medal} **{entry['username']}** — {entry['solved']}"
+                f"{medal} **{entry['username']}**: {entry['solved']}"
             )
         embed.add_field(
             name="📅 Today",
@@ -509,7 +523,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
             medals = {1: "🥇", 2: "🥈", 3: "🥉"}
             medal = medals.get(entry["rank"], "")
             weekly_lines.append(
-                f"{medal} **{entry['username']}** — {entry['solved']}"
+                f"{medal} **{entry['username']}**: {entry['solved']}"
             )
         embed.add_field(
             name="📆 This Week",
@@ -705,7 +719,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
         # Build embed
         embed = discord.Embed(
-            title=f"📊 Weekly Summary — {week_label}",
+            title=f"📊 Weekly Summary: {week_label}",
             color=config.EMBED_COLOR_WEEKLY,
         )
 
@@ -726,13 +740,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
             if easy:   diff_parts.append(f"Easy: {easy}")
             if medium: diff_parts.append(f"Medium: {medium}")
             if hard:   diff_parts.append(f"Hard: {hard}")
-            diff_str = " · ".join(diff_parts) if diff_parts else "—"
+            diff_str = " · ".join(diff_parts) if diff_parts else "0"
 
             value = (
                 f"{mention}\n" if mention else ""
             )
             value += (
-                f"{medal} **{total} solved** — {diff_str}\n"
+                f"{medal} **{total} solved**: {diff_str}\n"
                 f"🔥 Streak: {streak} day{'s' if streak != 1 else ''}  "
                 f"(longest: {longest})"
             )
@@ -1508,6 +1522,135 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
     # Register admin group on the command tree
     bot.tree.add_command(admin_group)
+
+    @bot.tree.command(
+        name="setup",
+        description="Set up the bot report and POTD channels for this server (Admin only).",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def setup_command(
+        interaction: discord.Interaction,
+        report_channel: discord.TextChannel,
+        potd_channel: discord.TextChannel | None = None,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("❌ This command must be run inside a server.", ephemeral=True)
+            return
+
+        assert bot.state is not None
+        bot_member = guild.me or guild.get_member(bot.user.id)
+        if bot_member:
+            perms = report_channel.permissions_for(bot_member)
+            required_perms = {
+                "View Channel": perms.view_channel,
+                "Send Messages": perms.send_messages,
+                "Embed Links": perms.embed_links,
+                "Attach Files": perms.attach_files,
+                "Read Message History": perms.read_message_history,
+            }
+            missing = [name for name, ok in required_perms.items() if not ok]
+            if missing:
+                await interaction.response.send_message(
+                    f"❌ Bot is missing permissions in {report_channel.mention}:\n"
+                    + "\n".join(f"- {m}" for m in missing)
+                    + "\nPlease grant them and try again.",
+                    ephemeral=True,
+                )
+                return
+
+        bot.state.set_guild_channel(guild.id, report_channel.id)
+        if potd_channel:
+            bot.state.set_guild_potd(guild.id, potd_channel.id, enabled=True)
+
+        embed = discord.Embed(
+            title="✅ Server Setup Complete",
+            description=(
+                f"Configuration saved for **{guild.name}**:\n"
+                f"• **Report Channel:** {report_channel.mention}\n"
+                f"• **POTD Channel:** {potd_channel.mention if potd_channel else report_channel.mention}\n\n"
+                "The weekly summary will now update automatically in this channel.\n"
+                "Use `/run` to trigger the report immediately."
+            ),
+            color=config.EMBED_COLOR_DAILY,
+        )
+        await interaction.response.send_message(embed=embed)
+        logger.info("Setup completed for guild %s (%d) by %s.", guild.name, guild.id, interaction.user)
+
+    report_group = app_commands.Group(
+        name="report",
+        description="Configure report and POTD channels for this server",
+        default_permissions=discord.Permissions(administrator=True),
+    )
+
+    @report_group.command(
+        name="channel",
+        description="Set the weekly report channel for this server.",
+    )
+    async def report_channel_command(
+        interaction: discord.Interaction,
+        target_channel: discord.TextChannel,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("❌ This command must be run inside a server.", ephemeral=True)
+            return
+
+        assert bot.state is not None
+        bot_member = guild.me or guild.get_member(bot.user.id)
+        if bot_member:
+            perms = target_channel.permissions_for(bot_member)
+            if not perms.send_messages or not perms.embed_links:
+                await interaction.response.send_message(
+                    f"⚠️ Warning: Bot lacks Send Messages or Embed Links permissions in {target_channel.mention}.",
+                    ephemeral=True,
+                )
+                return
+
+        bot.state.set_guild_channel(guild.id, target_channel.id)
+        await interaction.response.send_message(
+            f"✅ Report channel set to {target_channel.mention} for **{guild.name}**."
+        )
+        logger.info("Report channel updated to %d for guild %d by %s.", target_channel.id, guild.id, interaction.user)
+
+    @report_group.command(
+        name="potd",
+        description="Configure Problem of the Day channel and toggle for this server.",
+    )
+    async def report_potd_command(
+        interaction: discord.Interaction,
+        target_channel: discord.TextChannel | None = None,
+        enabled: bool = True,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        if not guild:
+            await interaction.response.send_message("❌ This command must be run inside a server.", ephemeral=True)
+            return
+
+        assert bot.state is not None
+        chan_id = target_channel.id if target_channel else None
+        bot.state.set_guild_potd(guild.id, chan_id, enabled=enabled)
+
+        status_text = "enabled" if enabled else "disabled"
+        chan_text = target_channel.mention if target_channel else "default report channel"
+        await interaction.response.send_message(
+            f"✅ POTD {status_text} in {chan_text} for **{guild.name}**."
+        )
+        logger.info("POTD set to %s (channel: %s) for guild %d by %s.", status_text, chan_id, guild.id, interaction.user)
+
+    bot.tree.add_command(report_group)
 
 
 # ---------------------------------------------------------------------------

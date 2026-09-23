@@ -56,55 +56,55 @@ class DiscordManager:
     # Channel resolution
     # ------------------------------------------------------------------
 
-    async def get_channel(self) -> discord.TextChannel:
+    async def get_channel(self, channel_id: int | None = None) -> discord.TextChannel:
         """
-        Resolve and cache the configured Discord channel.
-
-        Raises RuntimeError if the channel cannot be found.
+        Resolve a Discord text channel by ID, falling back to config.DISCORD_CHANNEL_ID.
         """
-        if self._channel is not None:
-            return self._channel
+        target_id = channel_id or config.DISCORD_CHANNEL_ID
+        if not target_id:
+            raise RuntimeError("No channel ID provided and DISCORD_CHANNEL_ID is not configured.")
 
-        channel = self._client.get_channel(config.DISCORD_CHANNEL_ID)
+        channel = self._client.get_channel(target_id)
         if channel is None:
-            # Try fetching directly (handles channels not yet in cache)
             try:
-                channel = await self._client.fetch_channel(config.DISCORD_CHANNEL_ID)
+                channel = await self._client.fetch_channel(target_id)
             except discord.NotFound:
-                raise RuntimeError(
-                    f"Discord channel {config.DISCORD_CHANNEL_ID} not found. "
-                    "Check DISCORD_CHANNEL_ID in your .env file."
-                )
+                raise RuntimeError(f"Discord channel {target_id} not found.")
             except discord.Forbidden:
-                raise RuntimeError(
-                    f"Bot lacks permission to access channel {config.DISCORD_CHANNEL_ID}."
-                )
+                raise RuntimeError(f"Bot lacks permission to access channel {target_id}.")
 
         if not isinstance(channel, discord.TextChannel):
-            raise RuntimeError(
-                f"Channel {config.DISCORD_CHANNEL_ID} is not a text channel."
-            )
+            raise RuntimeError(f"Channel {target_id} is not a text channel.")
 
-        self._channel = channel
-        logger.info("Resolved report channel: #%s (ID: %d)", channel.name, channel.id)
         return channel
 
     # ------------------------------------------------------------------
     # Message recovery
     # ------------------------------------------------------------------
 
-    async def recover_message(self) -> discord.Message | None:
+    async def recover_message(
+        self,
+        channel_id: int | None = None,
+        guild_id: int | str | None = None,
+    ) -> discord.Message | None:
         """
-        Attempt to fetch the stored report message from Discord.
+        Attempt to fetch the stored report message from Discord for a guild or fallback.
+        """
+        if guild_id is not None:
+            message_id = self._state.get_guild_message_id(guild_id)
+        else:
+            message_id = self._state.get_message_id()
 
-        Returns None if the message no longer exists or the ID is unset.
-        """
-        message_id = self._state.get_message_id()
         if message_id is None:
-            logger.info("No stored message ID — will create new message.")
+            logger.info("No stored message ID: will create new message.")
             return None
 
-        channel = await self.get_channel()
+        try:
+            channel = await self.get_channel(channel_id)
+        except Exception as exc:
+            logger.error("Could not resolve channel for message recovery: %s", exc)
+            return None
+
         for attempt in range(config.DISCORD_MAX_RETRIES):
             try:
                 message = await channel.fetch_message(message_id)
@@ -112,9 +112,12 @@ class DiscordManager:
                 return message
             except discord.NotFound:
                 logger.warning(
-                    "Stored message ID %d not found — will create a new one.", message_id
+                    "Stored message ID %d not found: will create a new one.", message_id
                 )
-                self._state.set_message_id(None)
+                if guild_id is not None:
+                    self._state.set_guild_message_id(guild_id, None)
+                else:
+                    self._state.set_message_id(None)
                 return None
             except discord.HTTPException as exc:
                 if exc.status == 429:
@@ -153,18 +156,31 @@ class DiscordManager:
     # Send new message
     # ------------------------------------------------------------------
 
-    async def send_report(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> discord.Message | None:
+    async def send_report(
+        self,
+        summary_embed: discord.Embed,
+        detailed_embeds: list[discord.Embed],
+        channel_id: int | None = None,
+        guild_id: int | str | None = None,
+    ) -> discord.Message | None:
         """
         Send a new message with the summary embed and interactive dropdown view.
         """
         from formatter import ReportView
         view = ReportView(self._client, summary_embed, detailed_embeds)
-        channel = await self.get_channel()
+        try:
+            channel = await self.get_channel(channel_id)
+        except Exception as exc:
+            logger.error("Could not resolve channel to send report: %s", exc)
+            return None
 
         for attempt in range(config.DISCORD_MAX_RETRIES):
             try:
                 message = await channel.send(embed=summary_embed, view=view)
-                self._state.set_message_id(message.id)
+                if guild_id is not None:
+                    self._state.set_guild_message_id(guild_id, message.id)
+                else:
+                    self._state.set_message_id(message.id)
                 logger.info("Sent new report message (ID: %d).", message.id)
                 return message
             except discord.HTTPException as exc:
@@ -196,7 +212,11 @@ class DiscordManager:
     # ------------------------------------------------------------------
 
     async def edit_report(
-        self, message: discord.Message, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]
+        self,
+        message: discord.Message,
+        summary_embed: discord.Embed,
+        detailed_embeds: list[discord.Embed],
+        guild_id: int | str | None = None,
     ) -> bool:
         """
         Edit an existing Discord message with the updated summary embed and view.
@@ -218,7 +238,10 @@ class DiscordManager:
                         await _discord_backoff(attempt)
                 elif exc.status == 404:
                     logger.warning("Message %d no longer exists.", message.id)
-                    self._state.set_message_id(None)
+                    if guild_id is not None:
+                        self._state.set_guild_message_id(guild_id, None)
+                    else:
+                        self._state.set_message_id(None)
                     return False
                 else:
                     logger.error(
@@ -236,40 +259,83 @@ class DiscordManager:
     # Publish or update (main entry point)
     # ------------------------------------------------------------------
 
-    async def publish_or_update(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> None:
+    async def publish_or_update(
+        self,
+        summary_embed: discord.Embed,
+        detailed_embeds: list[discord.Embed],
+        channel_id: int | None = None,
+        guild_id: int | str | None = None,
+    ) -> None:
         """
-        Publish a new report or update the existing one.
+        Publish a new report or update the existing one for a channel / guild.
         """
-        existing = await self.recover_message()
+        existing = await self.recover_message(channel_id=channel_id, guild_id=guild_id)
 
         if existing is not None:
-            success = await self.edit_report(existing, summary_embed, detailed_embeds)
+            success = await self.edit_report(
+                existing, summary_embed, detailed_embeds, guild_id=guild_id
+            )
             if not success:
-                logger.warning("Edit failed — attempting to send a new message.")
-                await self.send_report(summary_embed, detailed_embeds)
+                logger.warning("Edit failed: attempting to send a new message.")
+                await self.send_report(
+                    summary_embed, detailed_embeds, channel_id=channel_id, guild_id=guild_id
+                )
         else:
-            await self.send_report(summary_embed, detailed_embeds)
+            await self.send_report(
+                summary_embed, detailed_embeds, channel_id=channel_id, guild_id=guild_id
+            )
 
     # ------------------------------------------------------------------
     # New-week reset
     # ------------------------------------------------------------------
 
-    async def start_new_week(self, summary_embed: discord.Embed, detailed_embeds: list[discord.Embed]) -> None:
+    async def start_new_week(
+        self,
+        summary_embed: discord.Embed,
+        detailed_embeds: list[discord.Embed],
+        channel_id: int | None = None,
+        guild_id: int | str | None = None,
+    ) -> None:
         """
         Send a brand-new message for the new week and clean up older summaries.
         """
-        logger.info("Starting new week - creating fresh report message.")
-        self._state.set_message_id(None)
-        await self.send_report(summary_embed, detailed_embeds)
-        await self.cleanup_channel_duplicates(keep_current_message=True)
+        logger.info("Starting new week: creating fresh report message.")
+        if guild_id is not None:
+            self._state.set_guild_message_id(guild_id, None)
+        else:
+            self._state.set_message_id(None)
 
-    async def cleanup_channel_duplicates(self, keep_current_message: bool = True) -> int:
+        await self.send_report(
+            summary_embed, detailed_embeds, channel_id=channel_id, guild_id=guild_id
+        )
+        await self.cleanup_channel_duplicates(
+            channel_id=channel_id, guild_id=guild_id, keep_current_message=True
+        )
+
+    async def cleanup_channel_duplicates(
+        self,
+        channel_id: int | None = None,
+        guild_id: int | str | None = None,
+        keep_current_message: bool = True,
+    ) -> int:
         """
         Delete older duplicate 'Weekly LeetCode Summary' messages in the report channel,
         leaving only the current active report message.
         """
-        channel = await self.get_channel()
-        current_id = self._state.get_message_id() if keep_current_message else None
+        try:
+            channel = await self.get_channel(channel_id)
+        except Exception as exc:
+            logger.error("Could not resolve channel for cleanup: %s", exc)
+            return 0
+
+        if keep_current_message:
+            if guild_id is not None:
+                current_id = self._state.get_guild_message_id(guild_id)
+            else:
+                current_id = self._state.get_message_id()
+        else:
+            current_id = None
+
         deleted_count = 0
 
         try:
@@ -304,7 +370,12 @@ class DiscordManager:
     # Utility
     # ------------------------------------------------------------------
 
-    async def send_error_notification(self, title: str, description: str) -> None:
+    async def send_error_notification(
+        self,
+        title: str,
+        description: str,
+        channel_id: int | None = None,
+    ) -> None:
         """
         Send a brief error notification embed to the report channel.
         Does not affect the stored message ID.
@@ -312,51 +383,68 @@ class DiscordManager:
         from formatter import build_error_embed
 
         embed = build_error_embed(title, description)
-        channel = await self.get_channel()
         try:
+            channel = await self.get_channel(channel_id)
             await channel.send(embed=embed)
-        except discord.HTTPException as exc:
+        except Exception as exc:
             logger.error("Could not send error notification: %s", exc)
 
-    async def send_nudge_ping(self, mentions: list[str]) -> None:
+    async def send_nudge_ping(
+        self,
+        mentions: list[str],
+        channel_id: int | None = None,
+    ) -> None:
         """
         Send a reminder ping to users who haven't solved a problem today.
         """
         if not mentions:
             return
-            
-        channel = await self.get_channel()
+
+        try:
+            channel = await self.get_channel(channel_id)
+        except Exception as exc:
+            logger.error("Could not resolve channel for nudge ping: %s", exc)
+            return
+
         mention_str = " ".join(mentions)
-        
+
         embed = discord.Embed(
             title="⏰ 10 PM Nudge! Keep your streaks alive!",
             description="You haven't solved any LeetCode problems today! Midnight is approaching... time to lock in a quick Easy problem to keep your streak burning! 🔥",
-            color=discord.Color.orange()
+            color=discord.Color.orange(),
         )
-        
+
         try:
             await channel.send(content=mention_str, embed=embed, delete_after=60.0)
             logger.info("Sent 10 PM nudge ping to %d users.", len(mentions))
         except discord.HTTPException as exc:
             logger.error("Could not send nudge ping: %s", exc)
 
-    async def send_potd(self, potd_data: dict[str, Any]) -> None:
+    async def send_potd(
+        self,
+        potd_data: dict[str, Any],
+        channel_id: int | None = None,
+    ) -> None:
         """
-        Send the Problem of the Day to the main channel.
+        Send the Problem of the Day to the specified channel (or default).
         """
         if not potd_data:
             return
-            
-        channel = await self.get_channel()
-        
+
+        try:
+            channel = await self.get_channel(channel_id)
+        except Exception as exc:
+            logger.error("Could not resolve channel for POTD: %s", exc)
+            return
+
         diff_color = {
             "Easy": discord.Color.green(),
             "Medium": discord.Color.gold(),
             "Hard": discord.Color.red(),
         }.get(potd_data["difficulty"], discord.Color.blue())
-        
+
         url = f"{config.LEETCODE_BASE_URL}{potd_data['link']}"
-        
+
         embed = discord.Embed(
             title="🎯 LeetCode Problem of the Day",
             description=f"**[{potd_data['title']}]({url})**\n\n"
@@ -365,10 +453,10 @@ class DiscordManager:
             color=diff_color,
         )
         embed.set_footer(text=f"Date: {potd_data['date']}")
-        
+
         try:
             await channel.send(embed=embed)
-            logger.info("Sent POTD to Discord.")
+            logger.info("Sent POTD to Discord channel #%s.", channel.name)
         except discord.HTTPException as exc:
             logger.error("Could not send POTD: %s", exc)
 
@@ -384,28 +472,27 @@ class DiscordManager:
         """
         Upload today's Markdown report as a file attachment to the archive channel.
 
-        This creates a **permanent record** in Discord that survives:
+        This creates a permanent record in Discord that survives:
         - Bot restarts / redeploys
         - Ephemeral cloud filesystems (Render, Railway, etc.)
         - The daily report message being deleted or the bot being removed
 
         The archive channel is separate from the report channel, so its
-        history is never edited — just appended to each day.
+        history is never edited: just appended to each day.
 
         Does nothing if DISCORD_ARCHIVE_CHANNEL_ID is 0 (not configured).
         """
         from pathlib import Path
-        from datetime import date as _date  # avoid shadowing outer scope
+        from datetime import date as _date
 
         if config.DISCORD_ARCHIVE_CHANNEL_ID == 0:
-            logger.debug("Archive channel not configured — skipping upload.")
+            logger.debug("Archive channel not configured: skipping upload.")
             return
 
         if not report_path.exists():
             logger.warning("Archive skipped: report file does not exist at %s.", report_path)
             return
 
-        # Resolve archive channel
         archive_channel = self._client.get_channel(config.DISCORD_ARCHIVE_CHANNEL_ID)
         if archive_channel is None:
             try:
@@ -418,9 +505,8 @@ class DiscordManager:
             logger.error("Archive channel %d is not a text channel.", config.DISCORD_ARCHIVE_CHANNEL_ID)
             return
 
-        # Build a small header embed
         embed = discord.Embed(
-            title=f"📁 Archive — {today.strftime('%A, %d %B %Y')}",
+            title=f"📁 Archive: {today.strftime('%A, %d %B %Y')}",
             description=(
                 "Daily report saved as a file below.\n"
                 "This message is permanent and will never be edited."

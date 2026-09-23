@@ -81,26 +81,26 @@ class ProfileManager:
     ) -> dict[str, Any] | None:
         """Return a cleaned profile dict or None if invalid."""
         if not isinstance(profile, dict):
-            logger.warning("Profile at index %d is not a dict — skipping.", idx)
+            logger.warning("Profile at index %d is not a dict: skipping.", idx)
             return None
 
         name = profile.get("name", "").strip()
         if not name:
             logger.warning(
-                "Profile at index %d has no 'name' — skipping.", idx
+                "Profile at index %d has no 'name': skipping.", idx
             )
             return None
 
         url = profile.get("leetcode_url", "").strip()
         if not url:
             logger.warning(
-                "Profile '%s' has no 'leetcode_url' — skipping.", name
+                "Profile '%s' has no 'leetcode_url': skipping.", name
             )
             return None
 
         if not _is_valid_url(url):
             logger.warning(
-                "Profile '%s' has invalid leetcode_url '%s' — skipping.", name, url
+                "Profile '%s' has invalid leetcode_url '%s': skipping.", name, url
             )
             return None
 
