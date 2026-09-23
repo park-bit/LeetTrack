@@ -130,6 +130,7 @@ class StateManager:
                 "potd_channel_id": None,
                 "potd_enabled": True,
                 "current_message_id": None,
+                "potd_message_id": None,
             },
         )
 
@@ -161,6 +162,18 @@ class StateManager:
         """Set the current report message ID for a guild."""
         cfg = self.get_guild_config(guild_id)
         cfg["current_message_id"] = int(message_id) if message_id is not None else None
+        self.save()
+
+    def get_guild_potd_message_id(self, guild_id: int | str) -> int | None:
+        """Get the last posted POTD message ID for a guild."""
+        cfg = self.get_guild_config(guild_id)
+        val = cfg.get("potd_message_id")
+        return int(val) if val is not None else None
+
+    def set_guild_potd_message_id(self, guild_id: int | str, message_id: int | None) -> None:
+        """Set the last posted POTD message ID for a guild."""
+        cfg = self.get_guild_config(guild_id)
+        cfg["potd_message_id"] = int(message_id) if message_id is not None else None
         self.save()
 
     def get_all_guild_configs(self) -> dict[str, dict[str, Any]]:

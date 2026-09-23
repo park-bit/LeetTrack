@@ -424,9 +424,11 @@ class DiscordManager:
         self,
         potd_data: dict[str, Any],
         channel_id: int | None = None,
-    ) -> None:
+    ) -> discord.Message | None:
         """
-        Send the Problem of the Day to the specified channel (or default).
+        Send the Problem of the Day to the specified channel.
+
+        Returns the sent Message so callers can track and delete it later.
         """
         if not potd_data:
             return
@@ -455,10 +457,12 @@ class DiscordManager:
         embed.set_footer(text=f"Date: {potd_data['date']}")
 
         try:
-            await channel.send(embed=embed)
+            sent = await channel.send(embed=embed)
             logger.info("Sent POTD to Discord channel #%s.", channel.name)
+            return sent
         except discord.HTTPException as exc:
             logger.error("Could not send POTD: %s", exc)
+            return None
 
     # ------------------------------------------------------------------
     # Archive channel  (permanent file uploads)

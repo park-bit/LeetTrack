@@ -18,6 +18,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+import discord
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
@@ -712,11 +714,29 @@ class DailyScheduler:
                 potd_chan = cfg.get("potd_channel_id") or cfg.get("channel_id")
                 if not potd_chan and guild.get_channel(config.DISCORD_CHANNEL_ID):
                     potd_chan = config.DISCORD_CHANNEL_ID
-                if potd_chan:
-                    await self._discord_manager.send_potd(potd_data, channel_id=potd_chan)
-                    posted_guilds.add(guild.id)
+                if not potd_chan:
+                    continue
+
+                # Delete the previous day's POTD message for this guild.
+                old_msg_id = self._state.get_guild_potd_message_id(guild.id)
+                if old_msg_id:
+                    try:
+                        channel = guild.get_channel(potd_chan) or await client.fetch_channel(potd_chan)
+                        old_msg = await channel.fetch_message(old_msg_id)
+                        await old_msg.delete()
+                        logger.info("Deleted previous POTD %s for guild %s.", old_msg_id, guild.id)
+                    except discord.NotFound:
+                        pass
+                    except discord.HTTPException as exc:
+                        logger.warning("Could not delete previous POTD: %s", exc)
+
+                sent = await self._discord_manager.send_potd(potd_data, channel_id=potd_chan)
+                if sent:
+                    self._state.set_guild_potd_message_id(guild.id, sent.id)
+                posted_guilds.add(guild.id)
 
             if not posted_guilds and config.DISCORD_CHANNEL_ID:
                 await self._discord_manager.send_potd(potd_data, channel_id=config.DISCORD_CHANNEL_ID)
         except Exception as exc:
             logger.error("Error running POTD job: %s", exc)
+
