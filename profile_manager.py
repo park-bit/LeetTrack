@@ -110,6 +110,7 @@ class ProfileManager:
         return {
             "name": name,
             "leetcode_url": url.rstrip("/") + "/",
+            "leetcode_username": url.rstrip("/").split("/")[-1],
             "enabled": enabled,
             "discord_id": discord_id,
         }
@@ -157,11 +158,13 @@ class ProfileManager:
         if existing:
             existing["name"] = name
             existing["leetcode_url"] = leetcode_url
+            existing["leetcode_username"] = leetcode_url.rstrip("/").split("/")[-1]
             existing["enabled"] = True
         else:
             self._profiles.append({
                 "name": name,
                 "leetcode_url": leetcode_url,
+                "leetcode_username": leetcode_url.rstrip("/").split("/")[-1],
                 "enabled": True,
                 "discord_id": discord_id,
             })

@@ -778,10 +778,11 @@ def _register_commands(bot: LeetCodeBot) -> None:
             return
             
         name = matched["name"]
+        url = matched["leetcode_url"]
         
         from leetcode_fetcher import LeetCodeFetcher
         async with LeetCodeFetcher() as fetcher:
-            stats = await fetcher.get_user_stats(name)
+            stats = await fetcher.get_user_stats(url)
         
         if not stats:
             await interaction.followup.send(f"❌ Failed to fetch LeetCode profile for **{name}**. Check if the username is correct.")
@@ -1114,12 +1115,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
             return
             
         username = profile["name"]
+        url = profile["leetcode_url"]
         slug = duel["problem_slug"]
         start_time = duel["start_time"]
         
         from leetcode_fetcher import LeetCodeFetcher
         async with LeetCodeFetcher() as fetcher:
-            subs = await fetcher.get_accepted_submissions(username)
+            subs = await fetcher.get_accepted_submissions(url)
             
         # Check if they solved the problem AFTER the duel started
         won = False

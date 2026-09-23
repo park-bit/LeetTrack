@@ -493,6 +493,7 @@ class DailyScheduler:
         async with LeetCodeFetcher() as fetcher:
             for profile in profiles:
                 name = profile["name"]
+                url = profile["leetcode_url"]
                 discord_id = profile.get("discord_id")
                 
                 if not discord_id:
@@ -500,7 +501,7 @@ class DailyScheduler:
     
                 try:
                     # Fetch their absolute latest submissions
-                    subs = await fetcher.get_accepted_submissions(name)
+                    subs = await fetcher.get_accepted_submissions(url)
                     
                     # Count how many were solved "today" based on timezone
                     today_solves = 0
