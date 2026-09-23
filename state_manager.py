@@ -289,9 +289,59 @@ class StateManager:
         return self.get_history(username).get(date_str, [])
 
     # ------------------------------------------------------------------
-    # Utility
+    # Utility & Admin
     # ------------------------------------------------------------------
 
     def all_usernames(self) -> list[str]:
         """Return all usernames that have at least some stats stored."""
         return list(self._user_stats.keys())
+
+    def rename_user(self, old_name: str, new_name: str) -> bool:
+        """
+        Migrate user stats, streaks, history, and monthly leaderboard keys
+        when a user's display name is updated.
+        """
+        if old_name == new_name:
+            return False
+
+        changed = False
+        if old_name in self._user_stats:
+            self._user_stats[new_name] = self._user_stats.pop(old_name)
+            changed = True
+
+        if old_name in self._streaks:
+            self._streaks[new_name] = self._streaks.pop(old_name)
+            changed = True
+
+        if old_name in self._history:
+            self._history[new_name] = self._history.pop(old_name)
+            changed = True
+
+        monthly = self._state.get("monthly_leaderboard", {})
+        if old_name in monthly:
+            monthly[new_name] = monthly.pop(old_name)
+            changed = True
+
+        if changed:
+            self.save()
+            logger.info("Migrated state for renamed user: '%s' -> '%s'", old_name, new_name)
+        return changed
+
+    def set_user_streak(
+        self,
+        username: str,
+        current: int,
+        longest: int | None = None,
+        last_active_date: str | None = None,
+    ) -> None:
+        """Set a user's current/longest streak directly."""
+        streak = self.get_streak(username)
+        streak["current"] = current
+        if longest is not None:
+            streak["longest"] = longest
+        elif current > streak.get("longest", 0):
+            streak["longest"] = current
+        if last_active_date is not None:
+            streak["last_active_date"] = last_active_date
+        self.set_streak(username, streak)
+        self.save()

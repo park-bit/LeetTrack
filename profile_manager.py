@@ -138,9 +138,110 @@ class ProfileManager:
                 return p
         return None
 
+    def find_profile(self, identifier: str) -> dict[str, Any] | None:
+        """Find profile by Discord ID, name, or LeetCode username (case-insensitive)."""
+        ident_lower = identifier.strip().lower()
+        for p in self._profiles:
+            if p.get("discord_id") == identifier.strip():
+                return p
+            if p["name"].lower() == ident_lower:
+                return p
+            if p.get("leetcode_username", "").lower() == ident_lower:
+                return p
+        return None
+
     # ------------------------------------------------------------------
     # Mutation Methods
     # ------------------------------------------------------------------
+
+    def update_profile(
+        self,
+        identifier: str,
+        new_name: str | None = None,
+        new_url: str | None = None,
+        new_discord_id: str | None = None,
+        enabled: bool | None = None,
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """
+        Update an existing profile identified by name or discord ID.
+        Returns (success, message, profile_dict).
+        """
+        profile = self.find_profile(identifier)
+        if not profile:
+            return False, f"Profile '{identifier}' not found in database.", None
+
+        if new_url is not None:
+            new_url_clean = new_url.strip()
+            if not _is_valid_url(new_url_clean):
+                return False, f"Invalid LeetCode URL: '{new_url}'", None
+            profile["leetcode_url"] = new_url_clean.rstrip("/") + "/"
+            profile["leetcode_username"] = new_url_clean.rstrip("/").split("/")[-1]
+
+        if new_name is not None and new_name.strip():
+            profile["name"] = new_name.strip()
+
+        if new_discord_id is not None:
+            profile["discord_id"] = new_discord_id.strip()
+
+        if enabled is not None:
+            profile["enabled"] = bool(enabled)
+
+        self.save()
+        return True, f"Profile '{profile['name']}' updated successfully.", profile
+
+    def remove_profile_by_identifier(self, identifier: str) -> tuple[bool, str]:
+        """Remove a profile by name or Discord ID."""
+        profile = self.find_profile(identifier)
+        if not profile:
+            return False, f"Profile '{identifier}' not found in database."
+
+        name = profile["name"]
+        self._profiles = [p for p in self._profiles if p is not profile]
+        self.save()
+        return True, f"Profile '{name}' removed from database."
+
+    def add_or_update_profile(
+        self,
+        name: str,
+        leetcode_url: str,
+        discord_id: str = "",
+        enabled: bool = True,
+    ) -> tuple[bool, str, dict[str, Any] | None]:
+        """Add a new profile or update existing if name or Discord ID matches."""
+        if not _is_valid_url(leetcode_url):
+            return False, "Invalid LeetCode profile URL.", None
+
+        clean_url = leetcode_url.strip().rstrip("/") + "/"
+        clean_user = clean_url.rstrip("/").split("/")[-1]
+        clean_name = name.strip()
+        clean_did = discord_id.strip()
+
+        existing = None
+        if clean_did:
+            existing = self.get_profile_by_discord_id(clean_did)
+        if not existing:
+            existing = self.get_profile_by_name(clean_name)
+
+        if existing:
+            existing["name"] = clean_name
+            existing["leetcode_url"] = clean_url
+            existing["leetcode_username"] = clean_user
+            existing["enabled"] = enabled
+            if clean_did:
+                existing["discord_id"] = clean_did
+            self.save()
+            return True, f"Updated existing profile for '{clean_name}'.", existing
+
+        new_profile = {
+            "name": clean_name,
+            "leetcode_url": clean_url,
+            "leetcode_username": clean_user,
+            "enabled": enabled,
+            "discord_id": clean_did,
+        }
+        self._profiles.append(new_profile)
+        self.save()
+        return True, f"Added new profile for '{clean_name}'.", new_profile
 
     def add_profile(self, name: str, leetcode_url: str, discord_id: str) -> bool:
         """

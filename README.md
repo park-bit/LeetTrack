@@ -181,8 +181,19 @@ Use the `/run` slash command (bot owner only) to force the daily report immediat
 | Command | Description | Who |
 |---|---|---|
 | `/status` | Bot status, last run time, monitored users | Everyone |
-| `/run` | Force-run the daily job immediately | Bot owner only |
+| `/run` | Force-run the daily job immediately | Bot owner / Admins |
 | `/leaderboard` | Show today's and this week's leaderboards | Everyone |
+| `/weeksummary` | Generate activity chart for the last 7 days | Everyone |
+| `/profile` | View detailed LeetCode profile card & progress | Everyone |
+| `/register` | Link your Discord account to your LeetCode profile | Everyone |
+| `/unregister` | Unlink your LeetCode profile from the tracker | Everyone |
+| `/admin list` | List all tracked database profiles and Discord linkages | Admins only |
+| `/admin update` | Update user name, LeetCode URL, Discord ID, enabled status | Admins only |
+| `/admin add` | Add new user profile directly to database | Admins only |
+| `/admin remove` | Remove a user profile from database | Admins only |
+| `/admin link` | Quick-link a Discord user to a LeetCode profile | Admins only |
+| `/admin setstreak` | Manually set current or longest streak for a user | Admins only |
+| `/admin reload` | Force reload database profiles and state | Admins only |
 
 ---
 

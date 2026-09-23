@@ -296,6 +296,7 @@ def _register_commands(bot: LeetCodeBot) -> None:
         embed.add_field(name="`/register <name> <url>`", value="Register your LeetCode profile.\n*Example:* `/register name:Park url:https://leetcode.com/u/park-bit/`", inline=False)
         embed.add_field(name="`/unregister`", value="Remove your LeetCode profile from the bot.", inline=False)
         embed.add_field(name="`/profile`", value="Check which LeetCode profile is linked to your Discord account.", inline=False)
+        embed.add_field(name="`/admin`", value="Manage database profiles, names, Discord IDs, and streaks (Admin only).", inline=False)
         embed.add_field(name="`@DSA-chan`", value="Ping me anywhere to instantly see your stats for today.", inline=False)
         
         await interaction.response.send_message(embed=embed)
@@ -1147,6 +1148,347 @@ def _register_commands(bot: LeetCodeBot) -> None:
             logger.info("Duel won by %s.", interaction.user)
         else:
             await interaction.followup.send(f"❌ I checked your recent submissions, but I don't see an accepted solution for **{duel['problem_title']}** since the duel started. Keep trying!")
+
+    # ------------------------------------------------------------------
+    # Admin Command Group
+    # ------------------------------------------------------------------
+
+    def _is_admin(interaction: discord.Interaction) -> bool:
+        if str(interaction.user.id) in config.ADMIN_USER_IDS:
+            return True
+        if interaction.guild and interaction.user.guild_permissions.administrator:
+            return True
+        return False
+
+    async def _admin_profile_autocomplete(
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        if not bot.profile_manager:
+            return []
+        profiles = bot.profile_manager.get_all_profiles()
+        current_lower = current.lower()
+        choices = []
+        for p in profiles:
+            dc = p.get("discord_id") or "no DC ID"
+            label = f"{p['name']} ({dc})"
+            if current_lower in p["name"].lower() or current in str(p.get("discord_id", "")):
+                choices.append(app_commands.Choice(name=label[:100], value=p["name"]))
+        return choices[:25]
+
+    admin_group = app_commands.Group(
+        name="admin",
+        description="Admin controls for database, profiles, and streaks",
+        default_permissions=discord.Permissions(administrator=True),
+    )
+
+    @admin_group.command(
+        name="list",
+        description="List all tracked profiles and their database linkage.",
+    )
+    async def admin_list(interaction: discord.Interaction) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.profile_manager is not None
+        profiles = bot.profile_manager.get_all_profiles()
+        from database import DatabaseManager
+        backend = DatabaseManager().get_storage_type()
+
+        embed = discord.Embed(
+            title="🛡️ Database Profiles",
+            description=f"**Storage Backend:** `{backend}`\n**Total Profiles:** `{len(profiles)}`",
+            color=config.EMBED_COLOR_DAILY,
+        )
+
+        if not profiles:
+            embed.description += "\n\n*No profiles registered in database.*"
+        else:
+            for p in profiles:
+                name = p["name"]
+                url = p.get("leetcode_url", "N/A")
+                dc_id = p.get("discord_id", "")
+                dc_display = f"<@{dc_id}> (`{dc_id}`)" if dc_id else "*Not linked*"
+                status = "🟢 Enabled" if p.get("enabled", True) else "🔴 Disabled"
+                
+                streak_str = "0"
+                if bot.streak_manager:
+                    cur, long = bot.streak_manager.get(name)
+                    streak_str = f"cur: {cur}, longest: {long}"
+
+                field_value = (
+                    f"🔗 **LeetCode:** [{p.get('leetcode_username', name)}]({url})\n"
+                    f"💬 **Discord:** {dc_display}\n"
+                    f"⚙️ **Status:** {status} | 🔥 **Streak:** {streak_str}"
+                )
+                embed.add_field(name=f"👤 {name}", value=field_value, inline=False)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info("Admin list command run by %s.", interaction.user)
+
+    @admin_group.command(
+        name="update",
+        description="Modify an existing profile (name, URL, Discord ID, enabled status).",
+    )
+    @app_commands.describe(
+        target="User to update (type or select from list)",
+        new_name="New display name (renames in state & streaks too)",
+        new_url="New LeetCode URL (e.g. https://leetcode.com/u/username/)",
+        discord_user="Discord account to link",
+        discord_id="Raw Discord user ID string (alternative to tagging)",
+        enabled="Enable or disable monitoring for this user",
+    )
+    @app_commands.autocomplete(target=_admin_profile_autocomplete)
+    async def admin_update(
+        interaction: discord.Interaction,
+        target: str,
+        new_name: str | None = None,
+        new_url: str | None = None,
+        discord_user: discord.Member | None = None,
+        discord_id: str | None = None,
+        enabled: bool | None = None,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.profile_manager is not None
+
+        # Resolve discord ID
+        resolved_dc_id = None
+        if discord_user is not None:
+            resolved_dc_id = str(discord_user.id)
+        elif discord_id is not None:
+            resolved_dc_id = discord_id.strip()
+
+        # Find existing profile
+        old_profile = bot.profile_manager.find_profile(target)
+        if not old_profile:
+            await interaction.response.send_message(
+                f"❌ Profile `{target}` not found in database.", ephemeral=True
+            )
+            return
+
+        old_name = old_profile["name"]
+
+        # If name is being changed, rename in state manager too
+        if new_name and new_name.strip() and new_name.strip() != old_name:
+            if bot.state:
+                bot.state.rename_user(old_name, new_name.strip())
+
+        success, msg, updated = bot.profile_manager.update_profile(
+            target,
+            new_name=new_name,
+            new_url=new_url,
+            new_discord_id=resolved_dc_id,
+            enabled=enabled,
+        )
+
+        if not success or not updated:
+            await interaction.response.send_message(f"❌ {msg}", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="✅ Profile Updated",
+            description=f"Successfully modified database record for **{updated['name']}**.",
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="Name", value=f"`{old_name}` ➔ `{updated['name']}`", inline=True)
+        embed.add_field(
+            name="LeetCode",
+            value=f"[{updated.get('leetcode_username', updated['name'])}]({updated['leetcode_url']})",
+            inline=True,
+        )
+        did = updated.get("discord_id")
+        embed.add_field(
+            name="Discord Link",
+            value=f"<@{did}> (`{did}`)" if did else "*Not linked*",
+            inline=False,
+        )
+        embed.add_field(
+            name="Tracking",
+            value="🟢 Enabled" if updated.get("enabled", True) else "🔴 Disabled",
+            inline=True,
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info("Admin updated profile %s to %s by %s.", old_name, updated["name"], interaction.user)
+
+    @admin_group.command(
+        name="add",
+        description="Add a new user to the database.",
+    )
+    @app_commands.describe(
+        name="Display name for the user",
+        url="LeetCode profile URL (e.g. https://leetcode.com/u/username/)",
+        discord_user="Discord account to link",
+        discord_id="Raw Discord user ID string (alternative to tagging)",
+        enabled="Whether to enable monitoring immediately",
+    )
+    async def admin_add(
+        interaction: discord.Interaction,
+        name: str,
+        url: str,
+        discord_user: discord.Member | None = None,
+        discord_id: str | None = None,
+        enabled: bool = True,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.profile_manager is not None
+
+        resolved_dc_id = ""
+        if discord_user is not None:
+            resolved_dc_id = str(discord_user.id)
+        elif discord_id is not None:
+            resolved_dc_id = discord_id.strip()
+
+        success, msg, profile = bot.profile_manager.add_or_update_profile(
+            name=name,
+            leetcode_url=url,
+            discord_id=resolved_dc_id,
+            enabled=enabled,
+        )
+
+        if not success or not profile:
+            await interaction.response.send_message(f"❌ {msg}", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="✅ Profile Saved",
+            description=f"Profile for **{profile['name']}** added/updated in database.",
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="Name", value=f"`{profile['name']}`", inline=True)
+        embed.add_field(name="LeetCode URL", value=profile["leetcode_url"], inline=False)
+        did = profile.get("discord_id")
+        embed.add_field(
+            name="Linked Discord",
+            value=f"<@{did}> (`{did}`)" if did else "*Not linked*",
+            inline=True,
+        )
+        embed.add_field(
+            name="Tracking",
+            value="🟢 Enabled" if profile.get("enabled", True) else "🔴 Disabled",
+            inline=True,
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info("Admin added profile %s by %s.", profile["name"], interaction.user)
+
+    @admin_group.command(
+        name="remove",
+        description="Remove a profile from the database.",
+    )
+    @app_commands.describe(
+        target="User to remove (type or select from list)",
+    )
+    @app_commands.autocomplete(target=_admin_profile_autocomplete)
+    async def admin_remove(interaction: discord.Interaction, target: str) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.profile_manager is not None
+
+        success, msg = bot.profile_manager.remove_profile_by_identifier(target)
+        if success:
+            await interaction.response.send_message(f"✅ {msg}", ephemeral=True)
+            logger.info("Admin removed profile %s by %s.", target, interaction.user)
+        else:
+            await interaction.response.send_message(f"❌ {msg}", ephemeral=True)
+
+    @admin_group.command(
+        name="link",
+        description="Quickly link or re-link a Discord user to a LeetCode profile.",
+    )
+    @app_commands.describe(
+        target="User to link (type or select from list)",
+        discord_user="Discord account to link",
+    )
+    @app_commands.autocomplete(target=_admin_profile_autocomplete)
+    async def admin_link(
+        interaction: discord.Interaction,
+        target: str,
+        discord_user: discord.Member,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.profile_manager is not None
+
+        dc_id = str(discord_user.id)
+        success, msg, profile = bot.profile_manager.update_profile(
+            target, new_discord_id=dc_id
+        )
+
+        if success and profile:
+            embed = discord.Embed(
+                title="🔗 Discord Account Linked",
+                description=f"Linked **{profile['name']}** to {discord_user.mention} (`{dc_id}`).",
+                color=discord.Color.green(),
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            logger.info("Admin linked %s to Discord %s by %s.", profile["name"], dc_id, interaction.user)
+        else:
+            await interaction.response.send_message(f"❌ {msg}", ephemeral=True)
+
+    @admin_group.command(
+        name="setstreak",
+        description="Manually adjust a user's current or longest streak.",
+    )
+    @app_commands.describe(
+        target="User to adjust streak for",
+        current="Current streak value (days)",
+        longest="Longest streak value (optional)",
+    )
+    @app_commands.autocomplete(target=_admin_profile_autocomplete)
+    async def admin_setstreak(
+        interaction: discord.Interaction,
+        target: str,
+        current: int,
+        longest: int | None = None,
+    ) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        assert bot.state is not None
+        profile = bot.profile_manager.find_profile(target) if bot.profile_manager else None
+        user_name = profile["name"] if profile else target
+
+        bot.state.set_user_streak(user_name, current=current, longest=longest)
+        embed = discord.Embed(
+            title="🔥 Streak Updated",
+            description=f"Streak for **{user_name}** set to **{current}** (longest: **{longest if longest is not None else current}**).",
+            color=discord.Color.orange(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        logger.info("Admin set streak for %s: cur=%d by %s.", user_name, current, interaction.user)
+
+    @admin_group.command(
+        name="reload",
+        description="Reload all profiles and state from database/disk.",
+    )
+    async def admin_reload(interaction: discord.Interaction) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
+
+        if bot.profile_manager:
+            bot.profile_manager.load()
+        if bot.state:
+            bot.state.load()
+
+        await interaction.response.send_message("🔄 Database state and profiles reloaded.", ephemeral=True)
+        logger.info("Admin reloaded database state by %s.", interaction.user)
+
+    # Register admin group on the command tree
+    bot.tree.add_command(admin_group)
 
 
 # ---------------------------------------------------------------------------

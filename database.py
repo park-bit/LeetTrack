@@ -94,6 +94,31 @@ class DatabaseManager:
         else:
             self._write_json(path, data)
 
+    def delete_data(self, key: str, path: Path) -> bool:
+        """
+        Delete data by key from MongoDB or remove the local JSON file.
+        """
+        if self.use_mongo and self.storage is not None:
+            try:
+                res = self.storage.delete_one({"_id": key})
+                return res.deleted_count > 0
+            except Exception as exc:
+                logger.error("MongoDB delete error for %s: %s", key, exc)
+                return False
+        else:
+            if path.exists():
+                try:
+                    path.unlink()
+                    return True
+                except Exception as exc:
+                    logger.error("Local file delete error for %s: %s", path, exc)
+                    return False
+            return False
+
+    def get_storage_type(self) -> str:
+        """Return the active storage backend name."""
+        return "MongoDB Atlas" if (self.use_mongo and self.storage is not None) else "Local JSON"
+
     # ------------------------------------------------------------------
     # Local JSON Helpers (from original state_manager)
     # ------------------------------------------------------------------

@@ -32,6 +32,11 @@ DISCORD_CHANNEL_ID: int = int(os.environ.get("DISCORD_CHANNEL_ID", "0"))
 DISCORD_ARCHIVE_CHANNEL_ID: int = int(os.environ.get("DISCORD_ARCHIVE_CHANNEL_ID", "0"))
 WEEKLY_TEXT_CHANNEL_ID: int = 1516127365216993352
 
+ADMIN_USER_IDS: set[str] = {
+    uid.strip() for uid in os.environ.get("ADMIN_USER_IDS", "").split(",") if uid.strip()
+}
+ADMIN_USER_IDS.add("761809603670441994")  # Bot owner / park-bit default
+
 if not DISCORD_TOKEN:
     raise EnvironmentError(
         "DISCORD_TOKEN is not set. "
