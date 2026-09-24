@@ -480,7 +480,13 @@ class DailyScheduler:
             for p in profiles:
                 did = p.get("discord_id")
                 if did:
-                    if guild.get_member(int(did)) is not None:
+                    member = guild.get_member(int(did))
+                    if member is None:
+                        try:
+                            member = await guild.fetch_member(int(did))
+                        except (discord.NotFound, discord.HTTPException):
+                            member = None
+                    if member is not None:
                         guild_profiles.append(p)
                 elif is_primary_guild:
                     guild_profiles.append(p)

@@ -93,6 +93,7 @@ class LeetCodeBot(discord.Client):
 
     def __init__(self) -> None:
         intents = discord.Intents.default()
+        intents.members = True
         intents.message_content = False  # not needed: we only check message.mentions
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
@@ -491,7 +492,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
             for p in profiles:
                 did = p.get("discord_id")
                 if did:
-                    if interaction.guild.get_member(int(did)) is not None:
+                    member = interaction.guild.get_member(int(did))
+                    if member is None:
+                        try:
+                            member = await interaction.guild.fetch_member(int(did))
+                        except (discord.NotFound, discord.HTTPException):
+                            member = None
+                    if member is not None:
                         guild_profiles.append(p)
                 else:
                     guild_profiles.append(p)
