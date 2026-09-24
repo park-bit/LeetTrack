@@ -157,6 +157,13 @@ class LeetCodeBot(discord.Client):
         self.scheduler.start()
         logger.info("Bot is ready and scheduler is running.")
 
+        # Set bot presence status
+        activity = discord.Activity(
+            type=discord.ActivityType.watching,
+            name="LeetCode streaks | /help",
+        )
+        await self.change_presence(activity=activity)
+
     async def close(self) -> None:
         """Graceful shutdown."""
         logger.info("Shutting down bot...")
