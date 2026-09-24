@@ -278,6 +278,13 @@ class LeetCodeBot(discord.Client):
 def _register_commands(bot: LeetCodeBot) -> None:
     """Register all slash commands on the bot's command tree."""
 
+    def _is_admin(interaction: discord.Interaction) -> bool:
+        if str(interaction.user.id) in config.ADMIN_USER_IDS:
+            return True
+        if interaction.guild and interaction.user.guild_permissions.administrator:
+            return True
+        return False
+
     @bot.tree.command(
         name="help",
         description="Show all available bot commands and their syntax.",
@@ -371,9 +378,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
     @bot.tree.command(
         name="run",
-        description="Manually trigger the daily report.",
+        description="Manually trigger the daily report (Admin only).",
     )
+    @app_commands.default_permissions(administrator=True)
     async def run_command(interaction: discord.Interaction) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
         assert bot.scheduler is not None
 
         await interaction.response.send_message(
@@ -400,9 +411,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
             )
     @bot.tree.command(
         name="lastweek",
-        description="Manually post the raw text summary of the past week's problems.",
+        description="Manually post the raw text summary of the past week's problems (Admin only).",
     )
+    @app_commands.default_permissions(administrator=True)
     async def lastweek_command(interaction: discord.Interaction) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
         await interaction.response.send_message("⏳ Gathering past week data...", ephemeral=True)
         try:
             import formatter
@@ -449,9 +464,13 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
     @bot.tree.command(
         name="roll",
-        description="Force the bot to post a brand new message for the current week.",
+        description="Force the bot to post a brand new message for the current week (Admin only).",
     )
+    @app_commands.default_permissions(administrator=True)
     async def roll_command(interaction: discord.Interaction) -> None:
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Admin permissions required.", ephemeral=True)
+            return
         assert bot.scheduler is not None
         await interaction.response.defer()
         
@@ -1176,12 +1195,6 @@ def _register_commands(bot: LeetCodeBot) -> None:
     # Admin Command Group
     # ------------------------------------------------------------------
 
-    def _is_admin(interaction: discord.Interaction) -> bool:
-        if str(interaction.user.id) in config.ADMIN_USER_IDS:
-            return True
-        if interaction.guild and interaction.user.guild_permissions.administrator:
-            return True
-        return False
 
     async def _admin_profile_autocomplete(
         interaction: discord.Interaction,
