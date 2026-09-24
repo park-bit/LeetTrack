@@ -1,28 +1,38 @@
-# LeetCode Discord Bot
+# LeetCode Discord Bot (DSA chan)
 
-A fully automated LeetCode tracking system for Discord servers.  
-Zero manual intervention after setup — just add your profiles and let it run.
-CAN BE HOSTED ON RENDER FOR FREE TIER!!
+A fully automated LeetCode tracking and community competition bot for Discord servers.  
+Zero manual intervention after setup - just add your profiles and let it run.  
+Supports 24/7 cloud hosting on Render and persistent MongoDB Atlas storage.
+
+> **Repository Note**: The primary repository is hosted on [GitLab (park-bit/dsa-chan)](https://gitlab.com/park-bit/dsa-chan). This GitHub repository is an official mirror maintained by the same author. Both repositories are synchronized with the identical codebase.
 
 ---
 
-## ✨ Features
+### 🔗 Invite the Bot
+
+[**Click here to invite DSA chan to your server**](https://discord.com/oauth2/authorize?client_id=1513954649466605699&permissions=268823616&scope=bot+applications.commands)
+
+After inviting, run `/setup report_channel:#your-channel` to get started.
+
+---
+
+## Features
 
 | Feature | Description |
 |---|---|
-| 📊 **Daily Reports** | Automatic midnight report with each user's solves, difficulty breakdown, and clickable problem links |
-| 🔥 **Streak Tracking** | Current and longest streaks, automatically broken if a day is missed |
-| 🏆 **Leaderboards** | Daily, weekly, and monthly rankings with tie-breaking by Hard → Medium → name |
-| 🗺️ **Roadmap Progress** | Track completion of a curated problem roadmap (customisable) |
-| 📈 **Weekly Summaries** | Weekly totals per user embedded alongside the daily report |
-| ⚠️ **Inactive Detection** | Highlights users who didn't solve anything today |
-| 💾 **Persistence** | All data survives restarts; corrupt files are backed up and recreated |
-| 🤖 **Slash Commands** | `/status`, `/run`, `/leaderboard` |
-| 🔁 **Self-healing** | Retries on LeetCode rate limits and Discord API errors with exponential backoff |
-| 🆓 **Completely Free** | No cloud services, no paid APIs — runs on your own machine |
+| 📊 **Daily Reports** | Automatic daily report with each user's solves, difficulty breakdown, and clickable problem links |
+| 🔥 **Streak Tracking** | Current and longest streaks, automatically updated based on daily activity |
+| 🏆 **Server Leaderboards** | Weekly and monthly rankings filtered exclusively to members of each server |
+| ⚔️ **1v1 Duels** | Challenge server members to live coding races with `/duel` |
+| 🎯 **Problem of the Day** | Automated daily LeetCode challenge posting with automatic cleanup of yesterday's post |
+| 📈 **Weekly Summaries** | Weekly totals per user embedded with interactive dropdowns and activity charts |
+| ⚠️ **Inactive Detection** | Highlights users who did not solve anything today |
+| 💾 **Cloud Persistence** | Persistent MongoDB Atlas integration with seamless local JSON fallback |
+| 🤖 **Slash Commands** | Modern Discord slash command suite with server admin protections |
+| 🔁 **Self-healing** | Retries on LeetCode rate limits and Discord API errors with backoff |
 
 ---
----
+
 <details>
   <summary>📸 View Project Screenshots</summary>
 
@@ -34,7 +44,9 @@ CAN BE HOSTED ON RENDER FOR FREE TIER!!
 
 </details>
 
-## 🚀 Installation
+---
+
+## 🚀 Installation & Local Hosting
 
 ### Prerequisites
 
@@ -42,20 +54,20 @@ CAN BE HOSTED ON RENDER FOR FREE TIER!!
 - A Discord bot token ([guide below](#creating-a-discord-bot))
 - Internet access
 
-### Steps
+### Quick Start
 
 ```bash
-# 1. Clone or download this project
+# 1. Clone the project (GitHub mirror or GitLab primary)
 git clone https://github.com/park-bit/LeetTrack.git
 cd LeetTrack
 
 # 2. Run the one-click setup
 setup.bat
 
-# 3. Edit your credentials
+# 3. Configure credentials
 code .env
 
-# 4. Edit your user profiles
+# 4. Configure initial user profiles (optional, users can /register in Discord)
 code profiles.json
 
 # 5. Start the bot
@@ -76,10 +88,13 @@ Copy `.env.example` to `.env` and fill in:
 ```dotenv
 # Required
 DISCORD_TOKEN=your_discord_bot_token
-DISCORD_CHANNEL_ID=Copy your channel Id for storing Report using Developer Mode in DC.
+DISCORD_CHANNEL_ID=your_default_channel_id
 
-# Optional (defaults shown)
-TIMEZONE=Asia/Kolkata
+# Optional Cloud Database (MongoDB Atlas)
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/?appName=Cluster0
+
+# Optional Timezone & Scheduling (UTC matches LeetCode calendar reset at 00:00 UTC)
+TIMEZONE=UTC
 DAILY_RUN_HOUR=0
 DAILY_RUN_MINUTE=0
 LOG_LEVEL=INFO
@@ -87,259 +102,83 @@ LOG_LEVEL=INFO
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DISCORD_TOKEN` | ✅ | — | Bot token from Discord Developer Portal |
-| `DISCORD_CHANNEL_ID` | ✅ | — | Channel where reports are posted |
-| `TIMEZONE` | ❌ | `Asia/Kolkata` | Your local timezone ([list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)) |
-| `DAILY_RUN_HOUR` | ❌ | `0` | Hour (0–23) to run the daily job |
-| `DAILY_RUN_MINUTE` | ❌ | `0` | Minute (0–59) to run the daily job |
-| `LOG_LEVEL` | ❌ | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+| `DISCORD_TOKEN` | Yes | None | Bot token from Discord Developer Portal |
+| `DISCORD_CHANNEL_ID` | Yes | None | Default channel where reports are posted |
+| `MONGODB_URI` | No | None | MongoDB Atlas connection string for cloud storage |
+| `TIMEZONE` | No | `UTC` | Timezone for day rollover (`UTC` matches LeetCode) |
+| `DAILY_RUN_HOUR` | No | `0` | Hour (0-23) to run the daily rollover job |
+| `DAILY_RUN_MINUTE` | No | `0` | Minute (0-59) to run the daily rollover job |
+| `LOG_LEVEL` | No | `INFO` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 
 ---
 
-## 🏗️ Creating a Discord Bot
+## 🏗️ Creating Your Own Discord Bot
 
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Click **New Application** → name it (e.g. "LeetCode Tracker")
-3. Go to **Bot** → click **Add Bot**
-4. Under **Token** → click **Copy** (paste into `.env` as `DISCORD_TOKEN`)
-5. Under **Privileged Gateway Intents** → no special intents needed
-6. Go to **OAuth2 → URL Generator**:
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Click **New Application** and enter an application name.
+3. Navigate to **Bot** and click **Add Bot**.
+4. Under **Token**, click **Reset Token** and copy it into `.env` as `DISCORD_TOKEN`.
+5. Under **Privileged Gateway Intents**, keep all intents disabled (the bot uses standard REST and slash commands).
+6. Under **OAuth2 -> URL Generator**:
    - Scopes: `bot`, `applications.commands`
-   - Bot Permissions: `Send Messages`, `Read Messages/View Channels`, `Embed Links`, `Read Message History`
-7. Copy the generated URL → open in browser → add bot to your server
-8. Enable **Developer Mode** in Discord Settings → right-click your channel → **Copy Channel ID** → paste as `DISCORD_CHANNEL_ID`
-
----
-
-## 👥 Adding Users (Can Also be done by /register command)
-
-Edit `profiles.json`:
-
-```json
-[
-  {
-    "name": "Parth",
-    "leetcode_url": "https://leetcode.com/u/parth123/",
-    "enabled": true
-  },
-  {
-    "name": "Aman",
-    "leetcode_url": "https://leetcode.com/u/aman_dev/",
-    "enabled": true
-  }
-]
-```
-
-- **`name`**: Display name in Discord reports (can be anything)
-- **`leetcode_url`**: Full LeetCode profile URL — supports `/u/username/` and `/username/` formats
-- **`enabled`**: Set to `false` to pause tracking without removing the user
-
-> Profiles are **reloaded every midnight** — no restart needed to pick up changes.
-
----
-
-## 🗺️ Roadmap Setup
-
-Add JSON files to the `roadmaps/` directory:
-
-```json
-{
-  "two-sum": 1,
-  "best-time-to-buy-and-sell-stock": 2,
-  "contains-duplicate": 3
-}
-```
-
-- You can create multiple files (e.g., `neetcode150.json`, `striver_a2z.json`).
-- Keys are **exact LeetCode problem titles or slugs** (case-insensitive matching).
-- Values are the roadmap position numbers.
-- The bot auto-matches solved problems against this list using both title and slug.
-
-The 58-problem starter roadmap included covers:
-- Arrays & Hashing
-- Two Pointers / Sliding Window
-- Stack
-- Binary Search
-- Linked Lists
-- Dynamic Programming
-
----
-
-## ▶️ Running Locally
-
-```batch
-start.bat
-```
-
-The bot will:
-1. Connect to Discord
-2. Start the scheduler
-3. Run the daily job every midnight in your configured timezone
-4. Edit the same Discord message each day (new message every Monday)
-
-### Manual Trigger
-
-Use the `/run` slash command (bot owner only) to force the daily report immediately (useful for testing).
+   - Permissions: `View Channels`, `Send Messages`, `Manage Messages`, `Embed Links`, `Attach Files`, `Read Message History`, `Use External Emojis`, `Add Reactions`, `Manage Roles`
+7. Copy the generated URL and authorize the bot to your server.
 
 ---
 
 ## 📊 Slash Commands
 
-| Command | Description | Who |
+### General User Commands
+
+| Command | Description | Permission |
 |---|---|---|
-| `/status` | Bot status, last run time, monitored users | Everyone |
-| `/run` | Force-run the daily job immediately | Bot owner / Admins |
-| `/leaderboard` | Show today's and this week's leaderboards | Everyone |
-| `/weeksummary` | Generate activity chart for the last 7 days | Everyone |
-| `/profile` | View detailed LeetCode profile card & progress | Everyone |
-| `/register` | Link your Discord account to your LeetCode profile | Everyone |
-| `/unregister` | Unlink your LeetCode profile from the tracker | Everyone |
-| `/admin list` | List all tracked database profiles and Discord linkages | Admins only |
-| `/admin update` | Update user name, LeetCode URL, Discord ID, enabled status | Admins only |
-| `/admin add` | Add new user profile directly to database | Admins only |
-| `/admin remove` | Remove a user profile from database | Admins only |
-| `/admin link` | Quick-link a Discord user to a LeetCode profile | Admins only |
-| `/admin setstreak` | Manually set current or longest streak for a user | Admins only |
-| `/admin cleanup` | Clean up older duplicate summary messages from channel | Admins only |
-| `/admin reload` | Force reload database profiles and state | Admins only |
+| `/help` | Show full list of commands and usage syntax | Everyone |
+| `/status` | View bot uptime, scheduler status, and database health | Everyone |
+| `/leaderboard` | View active weekly and daily server rankings | Everyone |
+| `/weeksummary` | View interactive charts of community activity | Everyone |
+| `/profile` | Check your linked LeetCode profile, solve stats, and active streak | Everyone |
+| `/register <name> <url>` | Link your Discord account to a LeetCode profile | Everyone |
+| `/unregister` | Unlink your profile from the tracker | Everyone |
+| `/fetchdate <YYYY-MM-DD>` | View submissions for any specific date | Everyone |
+| `/duel @user [difficulty]` | Challenge another server member to a 1v1 problem race | Everyone |
+
+### Server Admin Commands
+
+| Command | Description | Permission |
+|---|---|---|
+| `/setup <report_channel> [potd_channel]` | Initialize and configure the bot for your server | Server Admins |
+| `/report channel <channel>` | Update the daily report channel for your server | Server Admins |
+| `/report potd [channel] [enabled]` | Configure or toggle the Problem of the Day channel | Server Admins |
+| `/roll` | Force an immediate report refresh in your server | Server Admins |
+| `/run` | Force the daily rollover job globally | Bot Owner / Admins |
+| `/lastweek` | Post the raw text dump of the past week's problems | Bot Owner / Admins |
+| `/admin add/update/remove` | Global profile management | Bot Owner / Admins |
+| `/admin setstreak` | Set current or longest streak for a user | Bot Owner / Admins |
 
 ---
 
-## 🔄 Updating Users
+## 👥 Multi-Server Support
 
-To **add** a user: append to `profiles.json` (no restart needed — reloads at midnight)  
-To **disable** a user: set `"enabled": false`  
-To **remove** a user: delete their entry  
-
-Their historical data in `data/history.json` and `data/streaks.json` will be preserved.
-
----
-
-## 🐛 Troubleshooting
-
-### Bot doesn't start
-
-```
-EnvironmentError: DISCORD_TOKEN is not set
-```
-→ Make sure `.env` exists and `DISCORD_TOKEN` is filled in.
-
-### Channel not found
-
-```
-RuntimeError: Discord channel 123... not found
-```
-→ Ensure `DISCORD_CHANNEL_ID` is correct and the bot has access to that channel.
-
-### No submissions appearing
-
-- Verify the LeetCode URL in `profiles.json` is correct and public
-- Check `logs/bot.log` for API errors
-- LeetCode GraphQL only returns **accepted** submissions — submissions with wrong answers won't appear
-
-### Streak is wrong
-
-Streaks are calculated at midnight. If the bot was offline during a midnight run, the streak for that day may not have been recorded. You can `/run` manually to trigger a catch-up.
-
-### Corrupt JSON file
-
-If a data file becomes corrupt, the bot automatically:
-1. Backs up the corrupt file with a timestamp suffix
-2. Recreates it with safe defaults
-3. Continues running
-
----
-
-## 🏛️ Project Architecture
-
-```
-leetcode-discord-bot/
-│
-├── bot.py                 # Entry point, Discord client, slash commands
-├── config.py              # Environment config, path constants
-├── scheduler.py           # APScheduler daily/monthly job orchestration
-├── formatter.py           # Discord Embed builders
-├── leetcode_fetcher.py    # Async LeetCode GraphQL client
-├── profile_manager.py     # Profile loading & validation
-├── roadmap_manager.py     # Roadmap loading & progress computation
-├── streak_manager.py      # Current/longest streak logic
-├── leaderboard_manager.py # Daily/weekly/monthly leaderboard builders
-├── discord_manager.py     # Discord message send/edit/retry logic
-├── state_manager.py       # All persistence (atomic JSON writes)
-│
-├── profiles.json          # ← Edit this: your LeetCode users
-├── roadmaps/              # ← Add JSON files here for your problem roadmaps
-├── state.json             # Auto-managed: bot runtime state
-│
-├── data/
-│   ├── user_stats.json    # Per-user solve counts, weekly/daily totals
-│   ├── streaks.json       # Per-user streak data
-│   └── history.json       # Per-user daily problem history
-│
-├── logs/
-│   └── bot.log            # Rotating log (5 MB × 5 files)
-│
-├── .venv/                 # Local Python virtual environment
-├── .env                   # Your secrets (git-ignored)
-├── .env.example           # Template for .env
-├── requirements.txt       # Python dependencies
-├── setup.bat              # One-click environment setup
-└── start.bat              # One-click bot launcher
-```
-
-### Data Flow
-
-```
-Midnight trigger (APScheduler)
-  │
-  ├─► Reload profiles.json
-  ├─► Monday? → Reset weekly counters, create new Discord message
-  ├─► Reset daily counters
-  │
-  ├─► LeetCode GraphQL API (for each user)
-  │     └─► Get recent accepted submissions
-  │
-  ├─► Compute today's new solves (diff against known_accepted)
-  ├─► Update streaks
-  ├─► Accumulate weekly/monthly totals
-  ├─► Compute roadmap progress
-  │
-  ├─► Build Discord Embeds (formatter.py)
-  └─► Send or Edit Discord message → Save state
-```
-
-
+The bot is designed to serve multiple Discord servers concurrently:
+- Each server configures its own dedicated report and POTD channels via `/setup`.
+- Leaderboards and reports automatically filter to members of the respective server.
+- Profiles and submission history are stored globally, meaning mutual users have identical stats across all servers without duplicate tracking.
 
 ---
 
 ## ❓ FAQ
 
 **Q: Does this use the official LeetCode API?**  
-A: Yes — it uses the public GraphQL API at `leetcode.com/graphql`, the same one the LeetCode website uses. No scraping.
+A: Yes. It uses the public GraphQL endpoint at `leetcode.com/graphql`, the same API backing the LeetCode website.
 
-**Q: Will LeetCode ban my IP?**  
-A: Very unlikely. The bot only makes a handful of requests per day (once at midnight, one request per user). It implements rate limiting, backoff, and respects 429 responses.
+**Q: When does the daily report rollover happen?**  
+A: By default, the rollover runs at 00:00 UTC (05:30 AM IST), aligning exactly with LeetCode's daily problem reset.
 
-**Q: Can I run this 24/7?**  
-A: Yes. It's lightweight — CPU usage is near zero between midnight jobs.
-
-**Q: What if I miss a midnight run (PC off)?**  
-A: Use `/run` to trigger the job manually when you come back online.
-
-**Q: Can I add more than 3 users?**  
-A: Yes — there's no limit. Just add more entries to `profiles.json`.
-
-**Q: Can I change the roadmaps?**  
-A: Yes — add or edit JSON files inside the `roadmaps/` folder. Problem matching uses both exact title and slug.
-
-**Q: Can I change the daily run time?**  
-A: Yes — set `DAILY_RUN_HOUR` and `DAILY_RUN_MINUTE` in `.env`.
-
-**Q: Is data backed up?**  
-A: All JSON files use atomic writes (write to `.tmp` then rename). Corrupt files are backed up automatically. For long-term safety, keep the `data/` folder in a backup location.
+**Q: What if our server misses an update during downtime?**  
+A: The bot automatically scans and backfills any submissions solved during the current week on next sync. Server admins can also run `/roll` to refresh immediately.
 
 ---
 
 ## 📄 License
 
-MIT — free to use, modify, and self-host.
+MIT - free to use, modify, and self-host.
