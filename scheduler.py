@@ -367,6 +367,29 @@ class DailyScheduler:
                     },
                 )
 
+            # Auto-backfill any submissions from the current week (handles mid-week joins, restarts, etc.)
+            if stored_week_start:
+                for sub in submissions:
+                    sub_date = datetime.fromtimestamp(sub.timestamp, tz=tz).date()
+                    if stored_week_start <= sub_date <= today:
+                        d_str = sub_date.isoformat()
+                        existing_day_probs = self._state.get_day_problems(name, d_str)
+                        if not any(p.get("slug") == sub.slug for p in existing_day_probs):
+                            self._state.add_history_entry(
+                                name,
+                                d_str,
+                                {
+                                    "slug": sub.slug,
+                                    "title": sub.title,
+                                    "difficulty": sub.difficulty,
+                                    "url": sub.url,
+                                    "lang": sub.lang,
+                                    "timestamp": sub.timestamp,
+                                    "tags": sub.tags,
+                                    "is_resubmission": sub.slug in known_slugs,
+                                },
+                            )
+
             # Leaderboard update (monthly accumulation)
             self._lb_manager.record_daily_solves(name, solved, easy, medium, hard)
 

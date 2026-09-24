@@ -80,8 +80,11 @@ class LeaderboardManager:
             if not profile.get("enabled", True):
                 continue
             name = profile["name"]
+            lc_user = profile.get("leetcode_username")
             
             probs = self._state.get_day_problems(name, today_iso)
+            if not probs and lc_user and lc_user != name:
+                probs = self._state.get_day_problems(lc_user, today_iso)
             solved = len(probs)
             easy = sum(1 for p in probs if p.get("difficulty") == "Easy")
             medium = sum(1 for p in probs if p.get("difficulty") == "Medium")
@@ -133,6 +136,7 @@ class LeaderboardManager:
             if not profile.get("enabled", True):
                 continue
             name = profile["name"]
+            lc_user = profile.get("leetcode_username")
             
             solved = 0
             easy = 0
@@ -140,7 +144,10 @@ class LeaderboardManager:
             hard = 0
             
             for d in dates_in_week:
-                probs = self._state.get_day_problems(name, d.isoformat())
+                d_iso = d.isoformat()
+                probs = self._state.get_day_problems(name, d_iso)
+                if not probs and lc_user and lc_user != name:
+                    probs = self._state.get_day_problems(lc_user, d_iso)
                 solved += len(probs)
                 easy += sum(1 for p in probs if p.get("difficulty") == "Easy")
                 medium += sum(1 for p in probs if p.get("difficulty") == "Medium")

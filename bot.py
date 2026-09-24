@@ -115,6 +115,7 @@ class LeetCodeBot(discord.Client):
         self.state.load()
 
         self.profile_manager = ProfileManager()
+        self.profile_manager.set_state_manager(self.state)
         self.profile_manager.load()
 
         self.roadmap_manager = RoadmapManager()
@@ -507,27 +508,29 @@ def _register_commands(bot: LeetCodeBot) -> None:
 
         daily_lines = []
         for entry in daily_lb:
-            medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-            medal = medals.get(entry["rank"], "")
-            daily_lines.append(
-                f"{medal} **{entry['username']}**: {entry['solved']}"
-            )
+            if entry["solved"] > 0:
+                medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+                medal = medals.get(entry["rank"], "")
+                daily_lines.append(
+                    f"{medal} **{entry['username']}**: {entry['solved']}"
+                )
         embed.add_field(
             name="📅 Today",
-            value="\n".join(daily_lines) or "No data",
+            value="\n".join(daily_lines) or "No solves recorded today",
             inline=False,
         )
 
         weekly_lines = []
         for entry in weekly_lb:
-            medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-            medal = medals.get(entry["rank"], "")
-            weekly_lines.append(
-                f"{medal} **{entry['username']}**: {entry['solved']}"
-            )
+            if entry["solved"] > 0:
+                medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+                medal = medals.get(entry["rank"], "")
+                weekly_lines.append(
+                    f"{medal} **{entry['username']}**: {entry['solved']}"
+                )
         embed.add_field(
             name="📆 This Week",
-            value="\n".join(weekly_lines) or "No data",
+            value="\n".join(weekly_lines) or "No solves recorded this week yet",
             inline=False,
         )
 

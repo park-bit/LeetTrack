@@ -47,6 +47,11 @@ class ProfileManager:
 
     def __init__(self) -> None:
         self._profiles: list[dict[str, Any]] = []
+        self._state_manager: Any = None
+
+    def set_state_manager(self, state_manager: Any) -> None:
+        """Link StateManager to handle automatic state migrations on name changes."""
+        self._state_manager = state_manager
 
     def load(self) -> None:
         """Read profiles.json from DB or disk and validate each entry."""
@@ -177,8 +182,11 @@ class ProfileManager:
             profile["leetcode_url"] = new_url_clean.rstrip("/") + "/"
             profile["leetcode_username"] = new_url_clean.rstrip("/").split("/")[-1]
 
+        old_name = profile.get("name")
         if new_name is not None and new_name.strip():
             profile["name"] = new_name.strip()
+            if old_name and old_name != profile["name"] and self._state_manager:
+                self._state_manager.rename_user(old_name, profile["name"])
 
         if new_discord_id is not None:
             profile["discord_id"] = new_discord_id.strip()
@@ -223,12 +231,15 @@ class ProfileManager:
             existing = self.get_profile_by_name(clean_name)
 
         if existing:
+            old_name = existing.get("name")
             existing["name"] = clean_name
             existing["leetcode_url"] = clean_url
             existing["leetcode_username"] = clean_user
             existing["enabled"] = enabled
             if clean_did:
                 existing["discord_id"] = clean_did
+            if old_name and old_name != clean_name and self._state_manager:
+                self._state_manager.rename_user(old_name, clean_name)
             self.save()
             return True, f"Updated existing profile for '{clean_name}'.", existing
 
@@ -257,10 +268,13 @@ class ProfileManager:
         # Check if they already exist by discord_id
         existing = self.get_profile_by_discord_id(discord_id)
         if existing:
+            old_name = existing.get("name")
             existing["name"] = name
             existing["leetcode_url"] = leetcode_url
             existing["leetcode_username"] = leetcode_url.rstrip("/").split("/")[-1]
             existing["enabled"] = True
+            if old_name and old_name != name and self._state_manager:
+                self._state_manager.rename_user(old_name, name)
         else:
             self._profiles.append({
                 "name": name,

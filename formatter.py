@@ -163,10 +163,15 @@ def build_weekly_aggregate_embeds(
     embeds = []
 
     user_colors = {
+        "parth": "🟠",
         "park-bit": "🟠",
         "lilght01": "🔵",
         "Yuuta_1678": "🟢",
-        "vedant_ghate": "🔴"
+        "vedant_ghate": "🔴",
+        "Priyanshu": "🟣",
+        "priyaannsshhu": "🟣",
+        "loki": "🟡",
+        "lokidass": "🟡",
     }
     default_color = "🟤"
     
@@ -304,10 +309,15 @@ def build_weekly_summary_embed(
     )
     
     user_colors = {
+        "parth": "🟠",
         "park-bit": "🟠",
         "lilght01": "🔵",
         "Yuuta_1678": "🟢",
-        "vedant_ghate": "🔴"
+        "vedant_ghate": "🔴",
+        "Priyanshu": "🟣",
+        "priyaannsshhu": "🟣",
+        "loki": "🟡",
+        "lokidass": "🟡",
     }
     default_color = "🟤"
     
